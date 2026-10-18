@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <cmath>
 #include <cstdlib>
-#include "../src/engine/Reverb.h"
+#include "../src/Reverb.h"
 using namespace wm::engine;
 static int fails = 0;
 #define CHECK(c) do { if (!(c)) { std::printf("FAIL line %d: %s\n", __LINE__, #c); ++fails; } } while (0)
