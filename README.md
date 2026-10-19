@@ -16,3 +16,7 @@ Status: DSP unit-tested, plugins build in CI. Not yet auditioned by ear.
 </p>
 
 ☕ Free and open source, made by one person. If it helps your music, a coffee on [Ko-fi](https://ko-fi.com/studio87) keeps it coming. 💜
+
+## Design mockup
+
+An interactive mockup of both plugins is in [docs/mockup/shimmerstuff.html](docs/mockup/shimmerstuff.html). Download it and open it in a browser. It runs a port of the plugin DSP, so it sounds like the real thing.
