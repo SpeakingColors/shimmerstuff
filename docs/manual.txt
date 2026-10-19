@@ -1,0 +1,43 @@
+# Intro
+
+shimmerstuff is a shimmer reverb and a shimmer delay in one plugin, with input and wet effects and a routing view. Shimmer means the tail is pitch shifted (for example up an octave) and fed back, so it climbs as it fades.
+
+It is free and open source, made by Studio 87. It collects nothing and works fully offline.
+
+# Quick start
+
+- Put shimmerstuff on a pad, a vocal or a synth. Pick a main preset at the top right.
+- Reverb tab: choose a type, then drag the yellow dot in the decay view (sideways for Decay, up and down for Size).
+- Delay tab: set Time and Feedback; Shift sets how far each repeat climbs or falls in pitch.
+- FX and Routing tab: drag the boxes to run reverb and delay in series or side by side.
+- Hover any control for one second to read what it does.
+
+# Reverb
+
+Five types: plate, hall, shimmer plate, shimmer hall and velvet. Decay is the tail length, Damping darkens it, Pre-delay delays its start, Size is the room size, Modulation adds movement. Shimmer pitch and Shimmer set how much pitch shifted tail is fed back (a second voice is available). Wet HP and Wet LP shape the tail only. The decay view shows the energy decay of the real reverb, measured live.
+
+# Delay
+
+Time, Feedback, Shift (semitones per repeat), Shimmer (how much of the repeat is shifted), Damping and Mix. Drag the first bar in the echo view for the time, any bar up or down for the feedback.
+
+# FX and routing
+
+Input FX (high-pass, low-pass and antialiased saturation) sit before the effects. Wet FX act on the effect signal only: saturation, a three band squash (quiet up, loud down), stereo width, a duck and a boost. The duck can follow the source, run free in Hz, or lock to the host tempo with eight shapes. Its source can be the plugin input or the sidechain input (turn it on in your DAW). The routing view shows Input FX, Reverb, Delay and Wet FX. Drag a box to another column to put it in series, or onto a column to put it in parallel. The power corner switches a box on or off.
+
+# Presets
+
+The preset list holds nine factory main presets (the whole plugin) and your own. Save writes your preset on this computer. The graph (routing) is saved with the preset and with your project, but it is not an automatable parameter.
+
+# Recommendations
+
+- Pad or vocal: Shimmer Hall, decay 6 s, Wet HP 300 Hz, Mix 30 %.
+- Pumping tail: Wet FX duck 1/4 BPM sync, source Plugin input.
+- Climbing echoes: Delay only, Shift +12, Feedback 55 %.
+
+# Interface tour
+
+The numbered picture below comes from the design mockup of the interface, so spacing can differ slightly from the plugin window. The list names every control.
+
+# Support
+
+If it helps your music you can support the project at ko-fi.com/studio87. The plugin never asks and never collects anything.

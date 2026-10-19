@@ -1,11 +1,10 @@
 # shimmerstuff
 
-Independent shimmer effects by SpeakingColors: **ShimmerDelay** and **ShimmerReverb** (VST3 + Standalone, Linux/Windows/macOS).
+Shimmer reverb, shimmer delay, input and wet FX and a routing view in one plugin, by Studio 87 (VST3 + Standalone, Linux/Windows/macOS).
 
-ShimmerReverb types: Plate, Hall, Shimmer Plate, Shimmer Hall, Lush.
-DSP is header-only in `src/Reverb.h` (shared with WhiskerMix and the catfx library in cat-ui).
+Reverb types: plate, hall, shimmer plate, shimmer hall, velvet. DSP is header-only (`src/Reverb.h`, `src/Fx.h`) with unit tests.
 
-Status: DSP unit-tested, plugins build in CI. Not yet auditioned by ear.
+Status: pre-release 0.1.0. Every knob is automatable. The routing graph is saved with presets and projects but is not an automatable parameter. The Decay view measures a private copy of the reverb. The duck sources "rig kick" from the mockup are not in the plugin (plugin input and sidechain input are). Not yet auditioned by ear.
 
     sh tests/run.sh
 
@@ -20,5 +19,3 @@ Status: DSP unit-tested, plugins build in CI. Not yet auditioned by ear.
 ## Design mockup
 
 An interactive mockup of both plugins is in [docs/mockup/shimmerstuff.html](docs/mockup/shimmerstuff.html). Download it and open it in a browser. It runs a port of the plugin DSP, so it sounds like the real thing.
-
-The mockup (v3) also shows where the plugin is going: a free routing diagram (Input FX, Reverb, Delay and Wet FX; drag the boxes in series or side by side, bypass, jump to the controls, edit values in the boxes), a Decay view with several draggable handles (decay, size, pre-delay, damping, shimmer, mix), a duck with an optional sidechain source, free or BPM synced shapes, and a main preset that holds the reverb, delay and routing together. The routing, wet FX and main preset are not in the C++ plugins yet.
