@@ -122,6 +122,26 @@ a.btn[aria-disabled="true"] { opacity:.45; pointer-events:none; }
 .panel { grid-template-rows:auto auto auto minmax(0,1fr) auto; }
 .main { grid-template-columns:minmax(0,1fr) 200px; }
 .viewcol { grid-template-rows:auto minmax(0,1fr) auto; }
+.modes { align-items:stretch; }
+.mainpre { display:flex; gap:6px; align-items:center; padding-left:12px; margin-left:4px; border-left:1px solid var(--line); flex:0 0 auto; }
+.mainpre .lab { font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-dim); white-space:nowrap; }
+.mainpre select { width:230px; }
+.g3.span2 { grid-column:span 2; }
+.tgrow { display:flex; gap:6px; flex-wrap:wrap; }
+.tgrow button { padding:6px 10px; }
+.dcol { display:grid; gap:6px; align-content:end; }
+.sdd { position:relative; }
+.sdb { display:flex; align-items:center; gap:8px; padding:3px 8px 3px 4px; min-width:150px; }
+.sdb canvas { width:48px; height:20px; border-radius:2px; }
+.sdb em { font-style:normal; flex:1; text-align:left; font-size:13px; letter-spacing:.06em; }
+.sdb u { text-decoration:none; color:var(--ink-dim); }
+.sdpop { position:absolute; left:0; bottom:100%; margin-bottom:4px; z-index:30; display:grid; grid-template-columns:repeat(2,1fr); gap:4px; padding:6px; background:#0e0f13; border:1px solid var(--cL); border-radius:4px; width:280px; box-shadow:0 8px 24px #000a; }
+.sdpop button { display:flex; align-items:center; gap:8px; padding:3px 6px 3px 4px; justify-content:flex-start; }
+.sdpop canvas { width:60px; height:25px; border-radius:2px; }
+.sdpop em { font-style:normal; font-size:12.5px; letter-spacing:.06em; }
+.hint3 button { margin-left:8px; padding:3px 10px; font-size:12px; }
+@keyframes gflash { 0%,100% { box-shadow:0 0 0 0 transparent; border-color:var(--line); } 15%,60% { box-shadow:0 0 0 3px #FFD10099, 0 0 18px #FFD10066; border-color:#FFD100; } }
+.g3.flash { animation:gflash 1.6s ease-out 1; }
 .modes { display:flex; gap:6px; }
 .modes button { flex:1 1 0; font-size:17px; padding:10px 12px; letter-spacing:.16em; }
 .modes button small { display:block; font-size:10.5px; letter-spacing:.14em; color:var(--ink-dim); margin-top:1px; text-transform:none; font-weight:500; }
@@ -172,6 +192,7 @@ aside.meters { padding:8px; gap:6px; }
       <button data-mode="reverb" data-tl="Shimmer Reverb" data-tip="The reverb plugin: plate, hall, shimmer plate, shimmer hall and velvet.">Shimmer Reverb<small>VST3 and Standalone</small></button>
       <button data-mode="delay" data-tl="Shimmer Delay" data-tip="The delay plugin: echoes that climb (or fall) in pitch with every repeat.">Shimmer Delay<small>VST3 and Standalone</small></button>
       <button data-mode="fx" data-tl="FX and Routing" data-tip="Route the reverb and delay (one, the other, in series or in parallel) and add saturation, squash, duck and width.">FX &amp; Routing<small>input and wet processing</small></button>
+      <div class="mainpre"><span class="lab">Main preset</span><select id="mpSel" aria-label="Main preset"></select><button id="mpSave">Save</button><button id="mpDel" hidden>Delete</button></div>
     </nav>
     <section class="rig" aria-label="Preview rig">
       <span class="lab">Preview rig</span>
@@ -196,7 +217,7 @@ aside.meters { padding:8px; gap:6px; }
         <button id="bPkReset" data-tip="Clears the held peaks and the clip light. Shortcut: R.">Peak reset</button>
       </aside>
     </section>
-    <footer class="foot"><span><b>Studio 87</b> &middot; shimmerstuff v0.1 design mockup</span><span id="sizeT" data-tip="Window size. Drag any edge or corner of the plugin to resize it; the shape stays the same. Double-click here for 100 %.">Window 100 %</span><span>Free and open source. Collects nothing.</span></footer>
+    <footer class="foot"><span><b>Studio 87</b> &middot; shimmerstuff v0.1 design mockup</span><span id="sizeT" data-tip="Window size. Drag any edge or corner of the plugin to resize it; the shape stays the same. Double-click here for 100 %.">Window 100 %</span></footer>
   </div>
   <div class="cheek r"></div>
 </div>
@@ -474,7 +495,25 @@ function genClick() {
   var n = Math.round(sr * 6), o = mk(n), i, pv = 0; for (i = 0; i < Math.round(0.004 * sr); i++) { var w = (Math.random() * 2 - 1) * Math.exp(-i / sr * 600); o[1][i] = w * 0.8; o[2][i] = w * 0.8; }
   return { buf: o[0], bpm: 120 };
 }
-var GEN = { pluck: genPluck, snare: genSnare, click: genClick, hard: genHard, acid: genAcid, hoover: genHoover, pink: genPink, sweep: genSweep, phase: genPhase };
+function genTrance(withKick) {
+  var bpm = 138, bt = 60 / bpm, n = Math.round(sr * bt * 16), o = mk(n), L = o[1], R = o[2], i, k, j, t;
+  var mel = [[0, 12, 7, 12], [3, 12, 10, 12], [5, 12, 8, 12], [7, 14, 10, 14]], root = 220, ph = [], det = [-0.019, -0.011, -0.004, 0, 0.004, 0.011, 0.019], lpL = 0, lpR = 0;
+  for (j = 0; j < 7; j++) ph.push(j * 0.173 % 1);
+  for (k = 0; k < 64; k++) { var s0 = Math.round(k * bt / 4 * sr), len = Math.round(bt / 4 * 0.9 * sr), semis = mel[(k >> 4) & 3][k % 4], f0 = root * Math.pow(2, semis / 12) * (k % 8 >= 4 ? 1 : 1);
+    var gate = (k % 16) % 4 === 3 ? 0 : 1; if (!gate) continue;
+    for (i = 0; i < len && s0 + i < n; i++) { t = i / sr; var l = 0, r = 0; for (j = 0; j < 7; j++) { ph[j] += f0 * (1 + det[j]) / sr; ph[j] -= Math.floor(ph[j]); var sw = 2 * ph[j] - 1; if (j % 2) l += sw; else r += sw; if (j === 3) { l += sw; r += sw; } }
+      var c = 0.08 + 0.35 * Math.exp(-t * 14); lpL += c * (l - lpL); lpR += c * (r - lpR); var e = Math.min(1, t * 400) * (len - i < 300 ? (len - i) / 300 : 1) * 0.16; L[s0 + i] += lpL * e; R[s0 + i] += lpR * e; } }
+  if (withKick) { for (k = 0; k < 16; k++) { var s1 = Math.round(k * bt * sr), kp = 0, len2 = Math.round(0.32 * sr); for (i = 0; i < len2 && s1 + i < n; i++) { t = i / sr; kp += 6.2832 * (45 + 120 * Math.exp(-t * 30)) / sr; var v = Math.tanh(2 * Math.sin(kp)) * Math.exp(-t * 7); L[s1 + i] += 0.8 * v; R[s1 + i] += 0.8 * v; } }
+    var sp = 0, sl = 0; for (i = 0; i < n; i++) { var beat = (i / sr) / bt, ph2 = beat % 1, env = Math.min(1, ph2 * 40) * Math.exp(-Math.max(0, ph2 - 0.1) * 3.5), f = 55 * Math.pow(2, (mel[(Math.floor(beat / 4)) & 3][0]) / 12) / 1; sp += f / sr; sp -= Math.floor(sp); sl += 0.06 * ((2 * sp - 1) - sl); var vb = sl * env * 0.35 * (ph2 > 0.08 ? 1 : 0.3); L[i] += vb; R[i] += vb; } }
+  norm(L, R, 0.85); return { buf: o[0], bpm: bpm };
+}
+function genBass() {
+  var bpm = 140, st = 60 / bpm / 4, steps = 64, n = Math.round(sr * st * steps), o = mk(n), L = o[1], R = o[2], ph = 0, ph2 = 0, lp = 0, s, i, notes = [0, 0, 12, 0, 0, 12, 0, 7, 0, 0, 12, 0, 3, 0, 12, 0];
+  for (s = 0; s < steps; s++) { if (s % 4 === 0) continue; var s0 = Math.round(s * st * sr), len = Math.round(st * 0.95 * sr), f = 55 * Math.pow(2, (notes[s % 16] + ((s >> 4) % 2 ? -2 : 0)) / 12);
+    for (i = 0; i < len && s0 + i < n; i++) { var t = i / sr; ph += f / sr; ph -= Math.floor(ph); ph2 += f * 1.004 / sr; ph2 -= Math.floor(ph2); var x = (2 * ph - 1) + (2 * ph2 - 1) * 0.6; lp += (0.03 + 0.1 * Math.exp(-t * 20)) * (x - lp); var v = Math.tanh(lp * 2.2) * Math.min(1, t * 700) * (len - i < 200 ? (len - i) / 200 : 1) * 0.6; L[s0 + i] += v; R[s0 + i] += v; } }
+  norm(L, R, 0.85); return { buf: o[0], bpm: bpm };
+}
+var GEN = { trance: function () { return genTrance(false); }, trancek: function () { return genTrance(true); }, bass: genBass, pluck: genPluck, snare: genSnare, click: genClick, hard: genHard, acid: genAcid, hoover: genHoover, pink: genPink, sweep: genSweep, phase: genPhase };
 /* JS port of the shimmerstuff C++ DSP (src/Reverb.h): same structure, constants and formulas, so the mockup sounds like the plugin core.
    Dattorro plate (JAES 1997), 8 line FDN hall, Velvet (two halls), two head pitch shifter, shimmer delay, shimmer reverb unit. */
 function DL() { this.buf = new Float32Array(8); this.n = 8; this.w = 0; }
@@ -629,9 +668,47 @@ InFx.prototype.process = function (l, r, p) {
   this.oL = o[0]; this.oR = o[1];
 };
 
+
+/* duck: shapes (1 = fully ducked, 0 = open) over one cycle, plus the engine that runs them */
+var DUCK_SHAPES = [
+  { n: "Pump", f: function (p) { return Math.exp(-p * 5); } },
+  { n: "Hard", f: function (p) { return 1 - p; } },
+  { n: "Soft", f: function (p) { return 0.5 * (1 + Math.cos(Math.PI * p)); } },
+  { n: "Gate", f: function (p) { return p < 0.5 ? 1 : 0; } },
+  { n: "Late swell", f: function (p) { var u = Math.min(1, Math.max(0, (p - 0.25) / 0.75)); return p < 0.25 ? 1 : 1 - u * u * (3 - 2 * u); } },
+  { n: "Dip", f: function (p) { return 1 - Math.abs(2 * p - 1); } },
+  { n: "Double", f: function (p) { return Math.exp(-((p * 2) % 1) * 5) * (p < 0.5 ? 1 : 0.7); } },
+  { n: "Stutter", f: function (p) { return (p * 4) % 1 < 0.5 ? 1 : 0; } }
+];
+function Duck() { this.env = 0; this.ph = 1; this.armed = true; this.kph = 0; this.kAmp = 0; this.gs = 1; this.dg = 1; this.sr = 48000; this.cool = 0; }
+/* p: amt, rel (ms), mode 0 follow / 1 free / 2 sync, src 0 none / 1 plugin input / 2 rig kick / 3 rig offbeat, shape, rate (Hz), beats, bpm */
+Duck.prototype.tick = function (dl, dr, p) {
+  var sr = this.sr, a = 0, trig = false;
+  if (p.src === 1) {
+    a = Math.max(Math.abs(dl), Math.abs(dr));
+    if (p.mode !== 0) { var ka = 1 - Math.exp(-1 / (0.0005 * sr)), kr2 = 1 - Math.exp(-1 / (0.04 * sr)); this.env += (a > this.env ? ka : kr2) * (a - this.env); if (this.cool > 0) this.cool--; if (this.armed && this.env > 0.08 && this.cool <= 0) { trig = true; this.armed = false; this.cool = Math.round(0.05 * sr); } else if (!this.armed && this.env < 0.04) this.armed = true; }
+  } else if (p.src >= 2) {
+    var per = 60 / Math.max(30, p.bpm) * sr, prev = this.kph; this.kph += 1 / per; if (this.kph >= 1) this.kph -= 1;
+    if (p.src === 2 ? this.kph < prev : (prev < 0.5 && this.kph >= 0.5)) { trig = true; this.kAmp = 1; }
+    this.kAmp *= Math.exp(-1 / (0.1 * sr)); a = this.kAmp;
+  }
+  if (p.amt <= 0.0005) { this.dg = 1; this.gs = 1; if (p.mode === 0) this.env = Math.max(0, this.env); return 1; }
+  if (p.mode === 0) {
+    if (p.src === 0) { this.dg = 1; return 1; }
+    var kr = 1 - Math.exp(-1 / (Math.max(10, p.rel) * 0.001 * sr)), ka2 = 1 - Math.exp(-1 / (0.002 * sr));
+    this.env += (a > this.env ? ka2 : kr) * (a - this.env);
+    this.dg = 1 - p.amt * Math.min(1, this.env * 3); return this.dg;
+  }
+  var T = p.mode === 1 ? sr / Math.max(0.05, p.rate) : 60 / Math.max(30, p.bpm) * p.beats * sr;
+  if (p.src === 1 ? trig : (p.src >= 2 && trig && this.ph >= 1)) this.ph = 0;
+  this.ph += 1 / T; if (this.ph >= 1) { if (p.src === 0) this.ph -= 1; else this.ph = 1; }
+  var e = DUCK_SHAPES[p.shape | 0].f(Math.min(1, this.ph)), g = 1 - p.amt * e;
+  this.gs += (1 - Math.exp(-1 / (0.0007 * sr))) * (g - this.gs); this.dg = this.gs; return this.gs;
+};
+
 /* wet FX: saturation, squash (three band upward and downward compression), width, duck, boost */
-function WetFx() { this.ad = new Adaa(); this.l1 = new OnePole(); this.l2 = new OnePole(); this.env = [[0, 0], [0, 0], [0, 0]]; this.duckEnv = 0; this.sr = 48000; this.oL = 0; this.oR = 0; this.gdb = [0, 0, 0]; }
-WetFx.prototype.prepare = function (sr) { this.sr = sr; };
+function WetFx() { this.ad = new Adaa(); this.l1 = new OnePole(); this.l2 = new OnePole(); this.env = [[0, 0], [0, 0], [0, 0]]; this.duck = new Duck(); this.sr = 48000; this.oL = 0; this.oR = 0; this.gdb = [0, 0, 0]; }
+WetFx.prototype.prepare = function (sr) { this.sr = sr; this.duck.sr = sr; };
 WetFx.prototype.squash = function (c, x, depth) {
   var k1 = 1 - Math.exp(-6.2831853 * 130 / this.sr), k2 = 1 - Math.exp(-6.2831853 * 2800 / this.sr);
   var lo = this.l1.lp(c, x, k1), l2 = this.l2.lp(c, x, k2), bands = [lo, l2 - lo, x - l2], out = 0, atk = 1 - Math.exp(-1 / (0.004 * this.sr)), rel = 1 - Math.exp(-1 / (0.07 * this.sr));
@@ -653,9 +730,7 @@ WetFx.prototype.process = function (wl, wr, dl, dr, p) {
     w[c] = x;
   }
   var m = 0.5 * (w[0] + w[1]), sd = 0.5 * (w[0] - w[1]) * p.width; w[0] = m + sd; w[1] = m - sd;
-  var a = Math.max(Math.abs(dl), Math.abs(dr)), kr = 1 - Math.exp(-1 / (Math.max(10, p.duckRel) * 0.001 * this.sr)), ka = 1 - Math.exp(-1 / (0.002 * this.sr));
-  this.duckEnv += (a > this.duckEnv ? ka : kr) * (a - this.duckEnv);
-  var dg = 1 - p.duckAmt * Math.min(1, this.duckEnv * 3), bg = Math.pow(10, p.boost / 20);
+  var dg = this.duck.tick(dl, dr, p.duck), bg = Math.pow(10, p.boost / 20);
   this.dg = dg; this.oL = w[0] * dg * bg; this.oR = w[1] * dg * bg;
 };
 /* ===== shimmerstuff mockup: Shimmer Reverb and Shimmer Delay. The sound comes from a JS port of the plugin DSP (shimmer-dsp.js). ===== */
@@ -670,14 +745,47 @@ var COL = { rev: "#CD92FE", del: "#02EBBA", acc: "#FFD100", pink: "#FF1383", blu
 def("mode", "reverb"); def("src", "pluck"); def("trim", 0); def("byp", false); def("view", "tail");
 def("type", 3); def("decay", 0.6); def("damp", 6000); def("predelay", 20); def("size", 1); def("mod", 0.5); def("color", 0);
 def("shift", 12); def("shimmer", 0.5); def("shift2", 7); def("shimmer2", 0); def("hp", 20); def("lp", 20000); def("mix", 0.35);
-def("route", "rev"); def("ifx_on", true); def("wfx_on", true); def("i_hp", 20); def("i_lp", 20000); def("i_drive", 6); def("i_mix", 0); def("w_drive", 8); def("w_smix", 0); def("w_depth", 0.6); def("w_qmix", 0); def("w_duck", 0); def("w_drel", 250); def("w_width", 1); def("w_boost", 0);
+def("graph", "ifx>rev>del>wfx"); def("rev_on", true); def("del_on", false); def("ifx_on", true); def("wfx_on", true); def("i_hp", 20); def("i_lp", 20000); def("i_drive", 6); def("i_mix", 0); def("w_drive", 8); def("w_smix", 0); def("w_depth", 0.6); def("w_qmix", 0); def("w_duck", 0); def("w_drel", 250); def("w_dmode", "follow"); def("w_dsrc", "input"); def("w_dshape", 0); def("w_drate", 2); def("w_dratio", 1); def("w_bpm", 140); def("w_width", 1); def("w_boost", 0);
 def("dtime", 450); def("dfb", 0.55); def("dshift", 12); def("dshim", 1); def("ddamp", 5000); def("dmix", 0.4);
 var RK = ["type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "mix"];
 var DK = ["dtime", "dfb", "dshift", "dshim", "ddamp", "dmix"];
-var FK = ["route", "ifx_on", "wfx_on", "i_hp", "i_lp", "i_drive", "i_mix", "w_drive", "w_smix", "w_depth", "w_qmix", "w_duck", "w_drel", "w_width", "w_boost"];
+var FK = ["graph", "rev_on", "del_on", "ifx_on", "wfx_on", "i_hp", "i_lp", "i_drive", "i_mix", "w_drive", "w_smix", "w_depth", "w_qmix", "w_duck", "w_drel", "w_dmode", "w_dsrc", "w_dshape", "w_drate", "w_dratio", "w_bpm", "w_width", "w_boost"];
+var MK = RK.concat(DK, FK);
 var MEAS_R = { type: 1, decay: 1, damp: 1, predelay: 1, size: 1, mod: 1, color: 1, shift: 1, shimmer: 1, shift2: 1, shimmer2: 1, hp: 1, lp: 1 };
 var MEAS_D = { dtime: 1, dfb: 1, dshift: 1, dshim: 1, ddamp: 1 };
-var KW = {};   /* knob wrappers, to dim the ones that do nothing for the current type */
+var KW = {}, DD = {}, FXG = [];   /* knob wrappers, to dim the ones that do nothing for the current type */
+
+
+/* ---------- routing graph: stages left to right; names inside a stage run side by side (parallel) ---------- */
+var LAYOUTS = [["ifx>rev>del>wfx", "FX, Reverb, Delay, Wet FX"], ["ifx>del>rev>wfx", "FX, Delay, Reverb, Wet FX"], ["ifx>rev|del>wfx", "FX, Reverb and Delay in parallel, Wet FX"], ["ifx>rev>wfx>del", "FX, Reverb, Wet FX, Delay"], ["ifx>del>wfx>rev", "FX, Delay, Wet FX, Reverb (FX between)"], ["rev>del>wfx>ifx", "Reverb, Delay, Wet FX, then FX"], ["wfx>ifx>rev>del", "Wet FX first, then FX, Reverb, Delay"], ["rev|del|ifx|wfx", "Everything in parallel"]];
+function parseGraph(str) {
+  var ids = { ifx: 1, rev: 1, del: 1, wfx: 1 }, seen = {}, st = [];
+  String(str).split(">").forEach(function (c) { var a = c.split("|").filter(function (x) { if (!ids[x] || seen[x]) return false; seen[x] = 1; return true; }); if (a.length) st.push(a); });
+  Object.keys(ids).forEach(function (k) { if (!seen[k]) st.push([k]); });
+  return st;
+}
+function graphStr(st) { return st.filter(function (a) { return a.length; }).map(function (a) { return a.join("|"); }).join(">"); }
+function mkShapeDD(host) {
+  var w = document.createElement("div"); w.className = "fld sdd"; w.innerHTML = "<span>Shape</span>";
+  var b = document.createElement("button"); b.className = "sdb"; b.type = "button"; b.innerHTML = '<canvas width="96" height="40"></canvas><em></em><u>&#9662;</u>'; w.appendChild(b);
+  var pop = document.createElement("div"); pop.className = "sdpop"; pop.hidden = true; w.appendChild(pop); host.appendChild(w);
+  function shapeCv(cv, i, col) {
+    var g = cv.getContext("2d"), W = cv.width, H = cv.height, f = DUCK_SHAPES[i].f, x;
+    g.clearRect(0, 0, W, H); g.fillStyle = "#0a0b0e"; g.fillRect(0, 0, W, H);
+    g.strokeStyle = "#2a2c35"; g.beginPath(); g.moveTo(0, H * 0.18 + 0.5); g.lineTo(W, H * 0.18 + 0.5); g.stroke();
+    g.beginPath(); for (x = 0; x <= W; x++) { var y = H * 0.18 + f(x / W) * (H * 0.64); if (x) g.lineTo(x, y); else g.moveTo(x, y); }
+    g.lineTo(W, H * 0.18); g.lineTo(0, H * 0.18); g.closePath(); g.fillStyle = col + "55"; g.fill();
+    g.beginPath(); for (x = 0; x <= W; x++) { var y2 = H * 0.18 + f(x / W) * (H * 0.64); if (x) g.lineTo(x, y2); else g.moveTo(x, y2); } g.strokeStyle = col; g.lineWidth = 2; g.stroke();
+  }
+  function paint() { var i = S.w_dshape | 0; shapeCv($("canvas", b), i, "#FFD100"); $("em", b).textContent = DUCK_SHAPES[i].n; }
+  pop.innerHTML = DUCK_SHAPES.map(function (sh, i) { return '<button type="button" data-i="' + i + '"><canvas width="96" height="40"></canvas><em>' + sh.n + '</em></button>'; }).join("");
+  $$("button", pop).forEach(function (pb) { var i = +pb.getAttribute("data-i"); shapeCv($("canvas", pb), i, "#FFD100"); pb.addEventListener("click", function () { setParam("w_dshape", i, true); pop.hidden = true; }); });
+  b.addEventListener("click", function () { pop.hidden = !pop.hidden; });
+  document.addEventListener("pointerdown", function (e) { if (!w.contains(e.target)) pop.hidden = true; });
+  addUI("w_dshape", paint); paint();
+  attachTip(w, "Shape", "The curve of one duck cycle: how the effect level dips and comes back. Pick one from the list. Each preview is one cycle: the top line is full level, the curve shows how far the effect is pulled down and how it comes back.");
+  return w;
+}
 
 /* ---------- build rig and controls ---------- */
 (function build() {
@@ -706,22 +814,42 @@ var KW = {};   /* knob wrappers, to dim the ones that do nothing for the current
   addUI("type", function () { UI.decay(S.decay); dimGroups(); });
 
   var F = $("#fxF");
-  var f1 = grp(F, 1, "Routing", "how reverb and delay connect"), f2 = grp(F, 2, "Input FX", "before the reverb and delay"), f3 = grp(F, 3, "Wet saturation", "drive the effect, not the dry"), f4 = grp(F, 4, "Squash", "lifts quiet tails, tames loud ones"), f5 = grp(F, 5, "Duck", "tail dips while the dry plays");
-  mkSel(f1, "route", "Route", [["rev", "Reverb only"], ["del", "Delay only"], ["rd", "Reverb into Delay"], ["dr", "Delay into Reverb"], ["par", "Parallel"]], "Reverb only or Delay only: just that effect. Reverb into Delay: the delay repeats the reverb. Delay into Reverb: the reverb washes the echoes. Parallel: both at once, side by side. No feedback loop between them.");
-  mkTog(f1, "ifx_on", "Input FX", "Turns the input filter and saturation on or off.", true);
-  mkTog(f1, "wfx_on", "Wet FX", "Turns the saturation, squash, duck, width and boost on the effect signal on or off.", true);
-  mkKnob(f1, { id: "w_width", label: "Width", min: 0, max: 2, step: 0.01, def: 1, mid: 1, color: COL.rev, fmt: function (v) { return Math.round(v * 100) + " %"; }, tip: "Stereo width of the effect only. 0 is mono, 200 % is extra wide." });
-  mkKnob(f1, { id: "w_boost", label: "Wet boost", min: 0, max: 12, step: 0.1, def: 0, color: COL.pink, fmt: fmtDb, tip: "Raises the effect level only, after the other wet FX. The easy way to make the reverb or delay louder." });
+  var f1 = grp(F, 1, "Routing", "drag the boxes in the diagram"), f2 = grp(F, 2, "Input FX", "before the reverb and delay"), f3 = grp(F, 3, "Wet saturation and level", "the effect, not the dry"), f4 = grp(F, 4, "Squash", "lifts quiet tails, tames loud ones"), f5 = grp(F, 5, "Duck", "the effect dips, then swells back", "span2");
+  FXG = [f1, f2, f3, f4, f5];
+  /* layout menu: ready made arrangements; any arrangement you drag together shows as Custom */
+  var lw = document.createElement("label"); lw.className = "fld"; lw.innerHTML = "<span>Layout</span>"; var ls = document.createElement("select");
+  LAYOUTS.forEach(function (o) { var op = document.createElement("option"); op.value = o[0]; op.textContent = o[1]; ls.appendChild(op); }); var oc = document.createElement("option"); oc.value = "__c"; oc.textContent = "Custom (your own)"; ls.appendChild(oc);
+  lw.appendChild(ls); f1.appendChild(lw); ls.value = S.graph;
+  ls.addEventListener("change", function () { if (ls.value !== "__c") setParam("graph", ls.value, true); });
+  addUI("graph", function (v) { ls.value = LAYOUTS.some(function (o) { return o[0] === v; }) ? v : "__c"; });
+  attachTip(lw, "Layout", "Ready made arrangements of Input FX, Reverb, Delay and Wet FX. Left to right is the signal order; a | means side by side (parallel). You can also drag the boxes in the diagram to build your own.");
+  var tg = document.createElement("div"); tg.className = "tgrow"; f1.appendChild(tg);
+  mkTog(tg, "rev_on", "Reverb", "Switches the reverb on or off in the routing. Off means it is bypassed where it sits.", true);
+  mkTog(tg, "del_on", "Delay", "Switches the delay on or off in the routing. Off means it is bypassed where it sits.", false);
+  mkTog(tg, "ifx_on", "Input FX", "Turns the input filter and saturation on or off.", true);
+  mkTog(tg, "wfx_on", "Wet FX", "Turns the saturation, squash, duck, width and boost on the effect signal on or off.", true);
+  mkKnob(f3, { id: "w_drive", label: "Drive", min: 0, max: 30, step: 0.1, def: 8, color: COL.acc, fmt: function (v) { return v.toFixed(1) + " dB"; }, tip: "Soft saturation of the effect signal. Adds harmonics to the tail." });
+  mkKnob(f3, { id: "w_smix", label: "Sat mix", min: 0, max: 1, step: 0.01, def: 0, color: COL.pink, fmt: fmtPct, tip: "Dry/wet of the wet saturation. 0 is off." });
+  mkKnob(f3, { id: "w_width", label: "Width", min: 0, max: 2, step: 0.01, def: 1, mid: 1, color: COL.rev, fmt: function (v) { return Math.round(v * 100) + " %"; }, tip: "Stereo width of the effect only. 0 is mono, 200 % is extra wide." });
+  mkKnob(f3, { id: "w_boost", label: "Wet boost", min: 0, max: 12, step: 0.1, def: 0, color: COL.pink, fmt: fmtDb, tip: "Raises the effect level only, after the other wet FX. The easy way to make the reverb or delay louder." });
   mkKnob(f2, { id: "i_hp", label: "Input HP", min: 20, max: 2000, log: true, def: 20, color: COL.blue, fmt: fmtHz, tip: "Cuts lows before they reach the effects. Keeps the tail clear of the bass." });
   mkKnob(f2, { id: "i_lp", label: "Input LP", min: 1000, max: 20000, log: true, def: 20000, color: COL.blue, fmt: fmtHz, tip: "Cuts highs before they reach the effects." });
   mkKnob(f2, { id: "i_drive", label: "Drive", min: 0, max: 30, step: 0.1, def: 6, color: COL.acc, fmt: function (v) { return v.toFixed(1) + " dB"; }, tip: "Saturation on the signal that feeds the effects. Antialiased." });
   mkKnob(f2, { id: "i_mix", label: "Sat mix", min: 0, max: 1, step: 0.01, def: 0, color: COL.pink, fmt: fmtPct, tip: "Dry/wet of the input saturation. 0 is off." });
-  mkKnob(f3, { id: "w_drive", label: "Drive", min: 0, max: 30, step: 0.1, def: 8, color: COL.acc, fmt: function (v) { return v.toFixed(1) + " dB"; }, tip: "Soft saturation of the effect signal. Adds harmonics to the tail." });
-  mkKnob(f3, { id: "w_smix", label: "Mix", min: 0, max: 1, step: 0.01, def: 0, color: COL.pink, fmt: fmtPct, tip: "Dry/wet of the wet saturation. 0 is off." });
   mkKnob(f4, { id: "w_depth", label: "Depth", min: 0, max: 1, step: 0.01, def: 0.6, color: COL.acc, fmt: fmtPct, tip: "How hard the three bands are pushed: quiet parts up, loud parts down. Makes tails dense and bright (OTT style)." });
   mkKnob(f4, { id: "w_qmix", label: "Mix", min: 0, max: 1, step: 0.01, def: 0, color: COL.pink, fmt: fmtPct, tip: "Dry/wet of the squash. 0 is off." });
-  mkKnob(f5, { id: "w_duck", label: "Amount", min: 0, max: 1, step: 0.01, def: 0, color: COL.acc, fmt: fmtPct, tip: "Lowers the effect while the dry signal plays, and lets it swell back after. Keeps leads clear and makes a pump." });
-  mkKnob(f5, { id: "w_drel", label: "Release", min: 20, max: 1000, log: true, def: 250, color: COL.acc, fmt: fmtMs, tip: "How fast the effect comes back after the dry signal stops." });
+  /* duck: how it is driven, where the trigger comes from, the shape, and the timing */
+  var dA = document.createElement("div"); dA.className = "dcol"; var dB = document.createElement("div"); dB.className = "dcol"; f5.appendChild(dA); f5.appendChild(dB);
+  mkSel(dA, "w_dmode", "Timing", [["follow", "Follow the source"], ["free", "Free (Hz)"], ["sync", "BPM sync"]], "Follow the source: the effect dips while the source plays and swells back after (the classic tail duck). Free: a repeating shape at a rate in Hz. BPM sync: a repeating shape locked to the tempo with a note ratio.");
+  mkSel(dA, "w_dsrc", "Sidechain source", [["none", "None (empty)"], ["input", "Plugin input (dry)"], ["kick", "Rig kick, every beat"], ["off", "Rig kick, off-beat"]], "Where the duck takes its trigger from. None: nothing triggers it, so Follow does nothing and Free or Sync run on their own clock. Plugin input: the dry signal triggers it. Rig kick: a test kick at the BPM, the stand-in for the sidechain input of the real plugin (a DAW track sent to the sidechain).");
+  DD.shape = mkShapeDD(dB);
+  DD.ratio = mkSel(dB, "w_dratio", "Ratio", [[0.25, "1/16"], [0.5, "1/8"], [1, "1/4"], [2, "1/2"], [4, "1 bar"], [8, "2 bars"], [16, "4 bars"]], "Length of one duck cycle in note values at the BPM (4/4). 1/4 is one beat.");
+  mkKnob(f5, { id: "w_duck", label: "Amount", min: 0, max: 1, step: 0.01, def: 0, color: COL.acc, fmt: fmtPct, tip: "How deep the effect dips. 0 is off." });
+  KW.w_drel = mkKnob(f5, { id: "w_drel", label: "Release", min: 20, max: 1000, log: true, def: 250, color: COL.acc, fmt: fmtMs, tip: "Follow mode: how fast the effect comes back after the source stops." });
+  KW.w_drate = mkKnob(f5, { id: "w_drate", label: "Rate", min: 0.25, max: 16, log: true, def: 2, color: COL.acc, fmt: function (v) { return v.toFixed(2) + " Hz"; }, tip: "Free mode: how often the shape repeats." });
+  KW.w_bpm = mkKnob(f5, { id: "w_bpm", label: "BPM", min: 60, max: 200, step: 1, def: 140, color: COL.blue, fmt: function (v) { return Math.round(v) + " BPM"; }, tip: "Tempo for the sync ratio and the rig kick. In the real plugin this is the host tempo." });
+  function duckUI() { var m = S.w_dmode; KW.w_drel.hidden = m !== "follow"; KW.w_drate.hidden = m !== "free"; KW.w_bpm.hidden = !(m === "sync" || S.w_dsrc === "kick" || S.w_dsrc === "off"); DD.ratio.hidden = m !== "sync"; DD.shape.hidden = m === "follow"; }
+  ["w_dmode", "w_dsrc"].forEach(function (k) { addUI(k, duckUI); }); duckUI();
   var d1 = grp(D, 1, "Echo", "timing and repeats"), d2 = grp(D, 2, "Shimmer", "pitch of the repeats"), d3 = grp(D, 3, "Tone and mix", "what reaches the output");
   mkKnob(d1, { id: "dtime", label: "Time", min: 20, max: 2000, log: true, def: 450, color: COL.del, fmt: fmtMs, tip: "Time between repeats. Drag the first bar on the Echoes view to set it. At 150 BPM an eighth note is 200 ms and a dotted eighth is 300 ms." });
   mkKnob(d1, { id: "dfb", label: "Feedback", min: 0, max: 0.95, step: 0.01, def: 0.55, color: COL.del, fmt: fmtPct, tip: "How much of each repeat goes back in. Higher gives more repeats. Drag the second bar on the Echoes view." });
@@ -742,31 +870,50 @@ function revSettings(mixOverride) {
   return { type: S.type | 0, shimmerSemis: S.shift, shimmerAmount: S.shimmer, shimmer2Semis: S.shift2, shimmer2Amount: S.shimmer2, wetHpHz: S.hp, wetLpHz: S.lp, mix: mixOverride === undefined ? S.mix : mixOverride,
     p: { decay: S.decay, dampHz: S.damp, preDelayMs: S.predelay, size: S.size, modDepth: S.mod, color: S.color } };
 }
-function dryGainOf(route) { var a = 1 - S.mix, b = 1 - S.dmix; return route === "rev" ? a : route === "del" ? b : route === "par" ? 0.5 * (a + b) : a * b; }
+/* how much of the dry stays: every unit that is on takes (1 - its mix); side by side stages average */
+function dryGainGraph() {
+  var g = 1; parseGraph(S.graph).forEach(function (st) { var sum = 0; st.forEach(function (id) { sum += id === "rev" && S.rev_on ? 1 - S.mix : id === "del" && S.del_on ? 1 - S.dmix : 1; }); g *= sum / st.length; }); return g;
+}
+/* graph engine. Each stage gets a state: d = the dry (only scaled), x = the dry as the effects see it (after input FX), w = the wet part.
+   A unit makes out = unit(x + w) and keeps x*(1-mix) as its dry; the wet part is whatever is left of the output. Wet FX only touches w, so it
+   never changes the dry. Input FX placed first reproduces the old behaviour exactly; placed later it filters the wet part only. */
+var GS = [0, 1, 2, 3, 4, 5].map(function () { return { dl: 0, dr: 0, xl: 0, xr: 0, wl: 0, wr: 0, hw: false }; }), GC = { str: "", st: [["ifx"], ["rev"], ["del"], ["wfx"]] };
+function copyS(o, a) { o.dl = a.dl; o.dr = a.dr; o.xl = a.xl; o.xr = a.xr; o.wl = a.wl; o.wr = a.wr; o.hw = a.hw; }
+function runNode(id, a, o, X) {
+  copyS(o, a);
+  if (id === "ifx") { if (!S.ifx_on) return; E.ifx.process(a.xl + a.wl, a.xr + a.wr, X.ip); if (!a.hw) { o.xl = E.ifx.oL; o.xr = E.ifx.oR; o.wl = 0; o.wr = 0; } else { o.wl = E.ifx.oL - a.xl; o.wr = E.ifx.oR - a.xr; } }
+  else if (id === "rev") { if (!S.rev_on) return; var g = 1 - S.mix; E.ru.process(a.xl + a.wl, a.xr + a.wr, X.rs); o.dl = a.dl * g; o.dr = a.dr * g; o.xl = a.xl * g; o.xr = a.xr * g; o.wl = E.ru.oL - o.xl; o.wr = E.ru.oR - o.xr; o.hw = true; }
+  else if (id === "del") { if (!S.del_on) return; var g2 = 1 - S.dmix; E.sd.process(a.xl + a.wl, a.xr + a.wr, X.dp); o.dl = a.dl * g2; o.dr = a.dr * g2; o.xl = a.xl * g2; o.xr = a.xr * g2; o.wl = E.sd.oL - o.xl; o.wr = E.sd.oR - o.xr; o.hw = true; }
+  else if (id === "wfx") { if (!S.wfx_on) return; E.wfx.process(a.wl, a.wr, X.l, X.r, X.wp); o.wl = E.wfx.oL; o.wr = E.wfx.oR; }
+}
 function procBlock(ev) {
-  var iL = ev.inputBuffer.getChannelData(0), iR = ev.inputBuffer.getChannelData(1), oL = ev.outputBuffer.getChannelData(0), oR = ev.outputBuffer.getChannelData(1), len = iL.length, i;
+  var iL = ev.inputBuffer.getChannelData(0), iR = ev.inputBuffer.getChannelData(1), oL = ev.outputBuffer.getChannelData(0), oR = ev.outputBuffer.getChannelData(1), len = iL.length, i, j, k;
   if (E.clear) { E.ru.reset(); E.sd.reset(); E.clear = false; }
-  var route = S.route, useR = route !== "del", useD = route !== "rev", rs = revSettings(), dp = { feedback: S.dfb, shiftSemis: S.dshift, shimmerAmount: S.dshim, dampHz: S.ddamp, mix: S.dmix, timeMs: E.curT };
-  var ip = { hp: S.i_hp, lp: S.i_lp, drive: S.i_drive, satMix: S.i_mix }, wp = { satDrive: S.w_drive, satMix: S.w_smix, squashDepth: S.w_depth, squashMix: S.w_qmix, width: S.w_width, duckAmt: S.w_duck, duckRel: S.w_drel, boost: S.w_boost };
-  var ifx = S.ifx_on, wfx = S.wfx_on, dg = dryGainOf(route), pIL = 0, pIR = 0, pOL = 0, pOR = 0, rms = 0, tgt = S.dtime, kT = 1 - Math.exp(-1 / (0.08 * sr)), byp = S.byp, a, xl, xr, yl, yr, t;
+  if (GC.str !== S.graph) { GC.str = S.graph; GC.st = parseGraph(S.graph); }
+  var st = GC.st, rs = revSettings(), dp = { feedback: S.dfb, shiftSemis: S.dshift, shimmerAmount: S.dshim, dampHz: S.ddamp, mix: S.dmix, timeMs: E.curT };
+  var ip = { hp: S.i_hp, lp: S.i_lp, drive: S.i_drive, satMix: S.i_mix };
+  var wp = { satDrive: S.w_drive, satMix: S.w_smix, squashDepth: S.w_depth, squashMix: S.w_qmix, width: S.w_width, boost: S.w_boost, duck: { amt: S.w_duck, rel: S.w_drel, mode: { follow: 0, free: 1, sync: 2 }[S.w_dmode] | 0, src: { none: 0, input: 1, kick: 2, off: 3 }[S.w_dsrc] | 0, shape: S.w_dshape | 0, rate: S.w_drate, beats: S.w_dratio, bpm: S.w_bpm } };
+  var X = { ip: ip, rs: rs, dp: dp, wp: wp, l: 0, r: 0 }, pIL = 0, pIR = 0, pOL = 0, pOR = 0, rms = 0, tgt = S.dtime, kT = 1 - Math.exp(-1 / (0.08 * sr)), byp = S.byp, a, cur, nxt, ol, or, ns = st.length;
   for (i = 0; i < len; i++) {
-    var l = iL[i], r = iR[i], ol, or;
-    xl = l; xr = r; if (ifx) { E.ifx.process(l, r, ip); xl = E.ifx.oL; xr = E.ifx.oR; }
+    var l = iL[i], r = iR[i]; X.l = l; X.r = r;
     E.curT += (tgt - E.curT) * kT; dp.timeMs = E.curT;
-    if (route === "rev") { E.ru.process(xl, xr, rs); yl = E.ru.oL; yr = E.ru.oR; }
-    else if (route === "del") { E.sd.process(xl, xr, dp); yl = E.sd.oL; yr = E.sd.oR; }
-    else if (route === "rd") { E.ru.process(xl, xr, rs); E.sd.process(E.ru.oL, E.ru.oR, dp); yl = E.sd.oL; yr = E.sd.oR; }
-    else if (route === "dr") { E.sd.process(xl, xr, dp); E.ru.process(E.sd.oL, E.sd.oR, rs); yl = E.ru.oL; yr = E.ru.oR; }
-    else { E.ru.process(xl, xr, rs); var rl = E.ru.oL, rr = E.ru.oR; E.sd.process(xl, xr, dp); yl = 0.5 * (rl + E.sd.oL); yr = 0.5 * (rr + E.sd.oR); }
-    var wl = yl - xl * dg, wr = yr - xr * dg;
-    if (wfx) { E.wfx.process(wl, wr, l, r, wp); wl = E.wfx.oL; wr = E.wfx.oR; }
-    ol = l * dg + wl; or = r * dg + wr;
+    cur = GS[0]; cur.dl = cur.xl = l; cur.dr = cur.xr = r; cur.wl = cur.wr = 0; cur.hw = false; nxt = GS[1];
+    for (j = 0; j < ns; j++) {
+      var stg = st[j];
+      if (stg.length === 1) { runNode(stg[0], cur, nxt, X); var t = cur; cur = nxt; nxt = t; }
+      else {
+        var acc = GS[2], tmp = GS[3], n = stg.length; acc.dl = acc.dr = acc.xl = acc.xr = acc.wl = acc.wr = 0; acc.hw = false;
+        for (k = 0; k < n; k++) { runNode(stg[k], cur, tmp, X); acc.dl += tmp.dl; acc.dr += tmp.dr; acc.xl += tmp.xl; acc.xr += tmp.xr; acc.wl += tmp.wl; acc.wr += tmp.wr; acc.hw = acc.hw || tmp.hw; }
+        var q = 1 / n; acc.dl *= q; acc.dr *= q; acc.xl *= q; acc.xr *= q; acc.wl *= q; acc.wr *= q; copyS(nxt, acc); var t2 = cur; cur = nxt; nxt = t2;
+      }
+    }
+    ol = cur.dl + cur.wl; or = cur.dr + cur.wr;
     if (byp) { ol = l; or = r; }
     if (!(ol === ol) || !(or === or) || Math.abs(ol) > 50 || Math.abs(or) > 50) { E.ru.reset(); E.sd.reset(); ol = 0; or = 0; }
     oL[i] = ol; oR[i] = or;
     a = Math.abs(l); if (a > pIL) pIL = a; a = Math.abs(r); if (a > pIR) pIR = a; a = Math.abs(ol); if (a > pOL) pOL = a; a = Math.abs(or); if (a > pOR) pOR = a; rms += ol * ol + or * or;
   }
-  var k = E.pk; k.inL = pIL; k.inR = pIR; k.outL = pOL; k.outR = pOR; k.rms = Math.sqrt(rms / (2 * len));
+  var kk = E.pk; kk.inL = pIL; kk.inR = pIR; kk.outL = pOL; kk.outR = pOR; kk.rms = Math.sqrt(rms / (2 * len));
 }
 function ensureAudio() {
   if (ctx) return true; if (!AC) return false;
@@ -794,21 +941,29 @@ $("#fileIn").addEventListener("change", function (e) {
 });
 
 /* ---------- measuring the real DSP: an impulse goes through a private copy of the engine ---------- */
-var M = { rev: null, del: null, busy: false }, MJ = { id: 0, timer: null }, MR = 48000;
-function routeNote() { var n = { rev: "Routing: reverb only", del: "Routing: delay only", rd: "Routing: reverb into delay", dr: "Routing: delay into reverb", par: "Routing: reverb and delay in parallel" }[S.route] || ""; var off = (S.mode === "reverb" && S.route === "del") || (S.mode === "delay" && S.route === "rev"); $("#routeNote").textContent = off ? "This effect is switched off by the routing. Change it on the FX & Routing tab." : n; $("#routeNote").style.color = off ? "#ff7bb1" : ""; }
-function schedMeasure() { if (drag || S.mode === "fx") return; clearTimeout(MJ.timer); M.busy = true; MJ.timer = setTimeout(startMeasure, 140); }
-function startMeasure() { var id = ++MJ.id; if (S.mode === "reverb") measureRev(id); else measureDel(id); }
+var M = { rev: null, del: null, busy: false }, MJ = { id: 0, timer: null, run: false, again: false }, MR = 48000;
+function routeNote() {
+  var off = (S.mode === "reverb" && !S.rev_on) || (S.mode === "delay" && !S.del_on), rn = $("#routeNote");
+  if (off) { rn.innerHTML = (S.mode === "reverb" ? "The reverb is switched off in the routing." : "The delay is switched off in the routing.") + ' <button id="rnOn">Turn it on</button>'; rn.style.color = "#ff7bb1"; $("#rnOn").addEventListener("click", function () { setParam(S.mode === "reverb" ? "rev_on" : "del_on", true, true); }); }
+  else { var fx = parseGraph(S.graph).map(function (a) { return a.map(function (x) { return { ifx: "Input FX", rev: "Reverb", del: "Delay", wfx: "Wet FX" }[x] + ((x === "rev" && !S.rev_on) || (x === "del" && !S.del_on) ? " (off)" : ""); }).join(" + "); }).join("  >  "); rn.textContent = "Signal: " + fx; rn.style.color = ""; }
+}
+function schedMeasure() {
+  if (S.mode === "fx") return;
+  if (drag) { if (drag.k !== "rv") return; if (MJ.run) { MJ.again = true; return; } startMeasure(true); return; }
+  clearTimeout(MJ.timer); M.busy = true; MJ.timer = setTimeout(function () { startMeasure(false); }, 140);
+}
+function startMeasure(q) { var id = ++MJ.id; MJ.run = true; MJ.again = false; if (S.mode === "reverb") measureRev(id, q); else measureDel(id); }
 function burst(n) { return n < 144 ? (Math.random() * 2 - 1) * 0.5 : 0; }
-function measureRev(id) {
-  var u = new RUnit(); u.prepare(MR); var set = revSettings(1), N = 12 * MR, e = new Float32Array(N), pos = 0, key = S.type;
+function measureRev(id, quick) {
+  var R = quick ? 16000 : MR, u = new RUnit(); u.prepare(R); var set = revSettings(1), N = 12 * R, e = new Float32Array(N), pos = 0, key = S.type, chunk = quick ? 8000 : 24000;
   function step() {
-    if (id !== MJ.id) return; var end = Math.min(N, pos + 24000);
+    if (id !== MJ.id) return; var end = Math.min(N, pos + chunk);
     for (; pos < end; pos++) { u.process(burst(pos), burst(pos), set); e[pos] = u.oL * u.oL + u.oR * u.oR; }
-    if (pos < N) setTimeout(step, 0); else finishRev(e, id, key);
+    if (pos < N) setTimeout(step, 0); else finishRev(e, id, key, quick);
   }
   step();
 }
-function finishRev(e, id, key) {
+function finishRev(e, id, key, quick) {
   if (id !== MJ.id) return; var N = e.length, tot = 0, i; for (i = 0; i < N; i++) tot += e[i];
   var P = 240, hop = N / P, edc = new Float32Array(P + 1), cum = 0, j = P;
   for (i = N - 1; i >= 0; i--) { cum += e[i]; if (i % hop === 0 || i === 0) { var idx = Math.round(i / hop); edc[idx] = 10 * Math.log10(cum / Math.max(tot, 1e-20) + 1e-12); } }
@@ -816,7 +971,7 @@ function finishRev(e, id, key) {
   var t5 = -1, t25 = -1; for (i = 0; i <= P; i++) { if (t5 < 0 && edc[i] <= -5) t5 = i / P * 12; if (t25 < 0 && edc[i] <= -25) { t25 = i / P * 12; break; } }
   var rt = null, over = false;
   if (t5 >= 0 && t25 >= 0) rt = 3 * (t25 - t5); else { over = true; }
-  M.rev = { edc: edc, rt: rt, over: over, key: key, total: tot }; M.busy = false;
+  M.rev = { edc: edc, rt: rt, over: over, key: key, total: tot, quick: !!quick }; M.busy = false; MJ.run = false; if (MJ.again && drag && drag.k === "rv") startMeasure(true);
 }
 function measureDel(id) {
   var T = S.dtime, fb = S.dfb, TOT = 8000, N = Math.round(TOT * MR / 1000), sd = new SDelay(); sd.prepare(MR);
@@ -834,7 +989,7 @@ function finishDel(e, ein, T, TOT, id) {
     var a = Math.round((k - 0.5) * T * sps), b = Math.min(e.length, Math.round((k + 0.5) * T * sps)), s = 0; for (var i = a; i < b; i++) s += e[i];
     var db = 10 * Math.log10(s / Math.max(ein, 1e-20) + 1e-12); bars.push({ k: k, t: k * T, db: db }); if (db < -66) break;
   }
-  M.del = { bars: bars, T: T, TOT: TOT, fb: S.dfb }; M.busy = false;
+  M.del = { bars: bars, T: T, TOT: TOT, fb: S.dfb }; M.busy = false; MJ.run = false;
 }
 
 /* ---------- views ---------- */
@@ -843,7 +998,7 @@ function buildViews() {
   var v = $("#vt"), list = VW[S.mode === "reverb" ? "reverb" : S.mode === "fx" ? "fx" : "del"]; v.innerHTML = "";
   list.forEach(function (x, i) {
     var b = document.createElement("button"); b.textContent = x[1]; b.setAttribute("data-view", x[0]); v.appendChild(b); b.addEventListener("click", function () { setParam("view", x[0], true); });
-    attachTip(b, x[1], x[0] === "route" ? "Routing: how the signal flows. Click Reverb or Delay to open it, click Input FX or Wet FX to switch them on or off. Shortcut: 1." : x[0] === "tail" ? (S.mode === "reverb" ? "Decay: how the tail fades, measured from the real DSP with an impulse. Drag the dot sideways to change the Decay. Shortcut: 1." : "Echoes: height and pitch of every repeat, measured from the real DSP. Drag the first bar sideways for Time and the second bar up or down for Feedback. Shortcut: 1.") : "Tone: live spectrum before (grey) and after (colour). Drag the lines to set the damping" + (S.mode === "reverb" ? " and the wet high-pass and low-pass" : "") + ". Shortcut: 2.");
+    attachTip(b, x[1], x[0] === "route" ? "Routing: drag the boxes to change the order (drop between two columns for in series, on a column for side by side). The power icon bypasses a box, the arrow icon jumps to its controls, and the numbers in a box change when you hold and drag them up or down. Shortcut: 1." : x[0] === "tail" ? (S.mode === "reverb" ? "Decay: how the tail fades, measured from the real DSP with an impulse. Yellow dot: drag sideways for Decay and up or down for Size. Cyan: pre-delay. Blue: damping. Orange: shimmer amount. Pink slider: mix. The purple curve follows while you drag. Shortcut: 1." : "Echoes: height and pitch of every repeat, measured from the real DSP. Drag the first bar sideways for Time and the second bar up or down for Feedback. Shortcut: 1.") : "Tone: live spectrum before (grey) and after (colour). Drag the lines to set the damping" + (S.mode === "reverb" ? " and the wet high-pass and low-pass" : "") + ". Shortcut: 2.");
   });
   setView(S.view);
 }
@@ -863,10 +1018,10 @@ function onParam(id, v) {
   if (id === "view") setView(v);
   if (id === "mode") {
     setModeUI(); if (ctx) E.clear = true;
-    setPresetSet(v === "reverb" ? FACT_R : v === "fx" ? FACT_F : FACT_D, v === "reverb" ? RK : v === "fx" ? FK : DK, KIT.key + "." + v + ".user.v1"); schedMeasure();
+    tabPresets(v); schedMeasure();
   }
   if (S.mode === "reverb" ? MEAS_R[id] : S.mode === "delay" ? MEAS_D[id] : false) schedMeasure();
-  if (id === "route" || id === "mix" || id === "dmix") routeNote();
+  if (id === "graph" || id === "rev_on" || id === "del_on" || id === "ifx_on" || id === "wfx_on" || id === "mix" || id === "dmix") routeNote();
 }
 document.addEventListener("keydown", function (e) {
   if (!modal.hidden || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
@@ -889,25 +1044,42 @@ function specCols(an, buf, w) {
 var GEO = null;   /* geometry of the current view, used by the mouse code */
 function axisFont(g) { g.font = "11px 'JetBrains Mono',monospace"; }
 function drawDecay(c) {
-  var g = c.g, w = c.w, h = c.h, P = { l: 46, r: 16, t: 20, b: 28 }, pw = w - P.l - P.r, ph = h - P.t - P.b, TMAX = 12, DMIN = -70, m = M.rev, d;
+  var g = c.g, w = c.w, h = c.h, P = { l: 46, r: 40, t: 20, b: 28 }, pw = w - P.l - P.r, ph = h - P.t - P.b, TMAX = 12, DMIN = -70, m = M.rev, d, H = [];
   var X = function (t) { return P.l + t / TMAX * pw; }, Y = function (db) { return P.t + (-clamp(db, DMIN, 0)) / (-DMIN) * ph; };
+  var edcAt = function (t) { if (!m) return -20; var n = m.edc.length, f = clamp(t / TMAX, 0, 1) * (n - 1), i0 = Math.floor(f), i1 = Math.min(n - 1, i0 + 1); return lerp(m.edc[i0], m.edc[i1], f - i0); };
   g.fillStyle = "#06080a"; g.fillRect(0, 0, w, h); axisFont(g);
   for (d = 0; d >= DMIN; d -= 10) { var y = Math.round(Y(d)) + 0.5; g.strokeStyle = d === -60 ? "#3a3560" : "#1a2422"; g.beginPath(); g.moveTo(P.l, y); g.lineTo(w - P.r, y); g.stroke(); g.fillStyle = d === -60 ? "#FFD100" : "#8f8bd6"; g.textAlign = "right"; g.textBaseline = "middle"; g.fillText(d + " dB", P.l - 6, y); }
   for (var t = 0; t <= TMAX; t += 2) { var x = Math.round(X(t)) + 0.5; g.strokeStyle = "#1a2422"; g.beginPath(); g.moveTo(x, P.t); g.lineTo(x, h - P.b); g.stroke(); g.fillStyle = "#8f8bd6"; g.textAlign = "center"; g.textBaseline = "top"; g.fillText(t + " s", x, h - P.b + 6); }
-  var pd = S.predelay / 1000; if (pd > 0) { g.fillStyle = "#CD92FE22"; g.fillRect(X(0), P.t, X(pd) - X(0), ph); g.fillStyle = "#CD92FE"; g.textAlign = "left"; g.textBaseline = "top"; g.fillText("pre " + Math.round(S.predelay) + " ms", X(0) + 4, P.t + 4); }
+  var pd = S.predelay / 1000; if (pd > 0) { g.fillStyle = "#01FCDC22"; g.fillRect(X(0), P.t, X(pd) - X(0), ph); }
   GEO = { kind: "rev", P: P, pw: pw, ph: ph };
-  if (!m) { g.fillStyle = "#8f93a3"; g.textAlign = "center"; g.textBaseline = "middle"; g.font = "15px 'Barlow Condensed',sans-serif"; g.fillText("measuring the tail...", w / 2, h / 2); return; }
-  var n = m.edc.length, gr = g.createLinearGradient(0, P.t, 0, h - P.b); gr.addColorStop(0, "#CD92FE66"); gr.addColorStop(1, "#CD92FE08");
-  g.beginPath(); g.moveTo(X(0), Y(DMIN)); for (var i = 0; i < n; i++) g.lineTo(X(i / (n - 1) * TMAX), Y(m.edc[i])); g.lineTo(X(TMAX), Y(DMIN)); g.closePath(); g.fillStyle = gr; g.fill();
-  g.beginPath(); for (i = 0; i < n; i++) { var px = X(i / (n - 1) * TMAX), py = Y(m.edc[i]); if (i) g.lineTo(px, py); else g.moveTo(px, py); } g.strokeStyle = "#CD92FE"; g.lineWidth = 2; g.stroke(); g.lineWidth = 1;
-  var label = m.rt !== null ? "RT60 " + m.rt.toFixed(1) + " s" : "RT60 over 12 s";
-  g.fillStyle = "#FFD100"; g.font = "16px 'Barlow Condensed',sans-serif"; g.textAlign = "right"; g.textBaseline = "top"; g.fillText(label + (S.type === 2 || S.type === 3 ? "  (with shimmer)" : ""), w - P.r - 4, P.t + 4);
-  if (M.busy) { g.fillStyle = "#8f93a3"; g.font = "11px 'JetBrains Mono',monospace"; g.fillText("updating...", w - P.r - 4, P.t + 26); }
-  var rt = m.rt !== null ? m.rt : TMAX, hx = drag && drag.k === "rev" ? clamp(drag.live, X(0), X(TMAX)) : X(clamp(rt, 0, TMAX)), hy = Y(-60);
-  g.strokeStyle = "#FFD10088"; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx, h - P.b); g.stroke(); g.setLineDash([]);
-  g.fillStyle = "#FFD100"; g.beginPath(); g.arc(hx, hy, 7, 0, 6.2832); g.fill(); g.strokeStyle = "#111"; g.stroke();
-  GEO.hx = hx; GEO.hy = hy;
-  g.fillStyle = "#8f93a3"; g.font = "12px 'Barlow Condensed',sans-serif"; g.textAlign = "left"; g.textBaseline = "bottom"; g.fillText("Drag the dot sideways to change the decay", P.l + 4, h - P.b - 4);
+  var rt = m && m.rt !== null ? m.rt : TMAX, dg = drag && drag.k === "rv" && drag.h === "yel";
+  if (m) {
+    var n = m.edc.length, gr = g.createLinearGradient(0, P.t, 0, h - P.b); gr.addColorStop(0, "#CD92FE66"); gr.addColorStop(1, "#CD92FE08");
+    g.beginPath(); g.moveTo(X(0), Y(DMIN)); for (var i = 0; i < n; i++) g.lineTo(X(i / (n - 1) * TMAX), Y(m.edc[i])); g.lineTo(X(TMAX), Y(DMIN)); g.closePath(); g.fillStyle = gr; g.fill();
+    g.beginPath(); for (i = 0; i < n; i++) { var px = X(i / (n - 1) * TMAX), py = Y(m.edc[i]); if (i) g.lineTo(px, py); else g.moveTo(px, py); } g.strokeStyle = "#CD92FE"; g.lineWidth = 2; g.stroke(); g.lineWidth = 1;
+    var label = m.rt !== null ? "RT60 " + m.rt.toFixed(1) + " s" : "RT60 over 12 s";
+    g.fillStyle = "#FFD100"; g.font = "16px 'Barlow Condensed',sans-serif"; g.textAlign = "right"; g.textBaseline = "top"; g.fillText(label + (S.type === 2 || S.type === 3 ? "  (with shimmer)" : "") + "   size x" + S.size.toFixed(2), w - P.r - 4, P.t + 4);
+    if (M.busy || m.quick) { g.fillStyle = "#8f93a3"; g.font = "11px 'JetBrains Mono',monospace"; g.fillText(drag ? "live preview" : "updating...", w - P.r - 4, P.t + 26); }
+  } else { g.fillStyle = "#8f93a3"; g.textAlign = "center"; g.textBaseline = "middle"; g.font = "15px 'Barlow Condensed',sans-serif"; g.fillText("measuring the tail...", w / 2, h / 2); }
+  /* handles. yellow: x is the decay (at the RT60 point), y along its dashed track is the size */
+  var hx = dg ? clamp(drag.lx, X(0), X(TMAX)) : X(clamp(rt, 0, TMAX)), sy = P.t + 10 + (1 - (S.size - 0.5) / 1.1) * (ph - 20);
+  g.strokeStyle = "#FFD10088"; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(hx, P.t); g.lineTo(hx, h - P.b); g.stroke(); g.setLineDash([]);
+  H.push({ id: "yel", x: hx, y: sy, col: "#FFD100", name: "Decay + Size", sub: Math.round(S.decay * 100) + " %  x" + S.size.toFixed(2) });
+  H.push({ id: "pre", x: X(pd), y: P.t + 12, col: "#01FCDC", name: "Pre-delay", sub: Math.round(S.predelay) + " ms", sq: true });
+  H.push({ id: "damp", x: X(1.2), y: Y(edcAt(1.2)), col: "#6CC9F5", name: "Damping", sub: fmtHz(S.damp) });
+  if (S.type === 2 || S.type === 3) H.push({ id: "shim", x: X(3.4), y: Y(edcAt(3.4)), col: "#FF9000", name: "Shimmer", sub: Math.round(S.shimmer * 100) + " %" });
+  var mx = w - P.r + 18, m0 = P.t + 14, m1 = h - P.b - 10, my = m1 - S.mix * (m1 - m0);
+  g.strokeStyle = "#FF138388"; g.lineWidth = 3; g.beginPath(); g.moveTo(mx, m0); g.lineTo(mx, m1); g.stroke(); g.lineWidth = 1;
+  g.fillStyle = "#FF1383"; g.font = "11px 'Barlow Condensed',sans-serif"; g.textAlign = "center"; g.textBaseline = "bottom"; g.fillText("MIX", mx, m0 - 3);
+  H.push({ id: "mix", x: mx, y: my, col: "#FF1383", name: "Mix", sub: Math.round(S.mix * 100) + " %", right: true });
+  H.forEach(function (hd, hi) {
+    var act = drag && drag.k === "rv" && drag.h === hd.id, hov = GEO.hov === hd.id; g.fillStyle = hd.col; g.strokeStyle = act || hov ? "#fff" : "#111"; g.lineWidth = act || hov ? 2 : 1;
+    g.beginPath(); if (hd.sq) g.rect(hd.x - 6, hd.y - 6, 12, 12); else g.arc(hd.x, hd.y, hd.id === "yel" ? 8 : 6.5, 0, 6.2832); g.fill(); g.stroke(); g.lineWidth = 1;
+    if (act || hov) { g.font = "13px 'Barlow Condensed',sans-serif"; g.textBaseline = "middle"; g.textAlign = hd.right || hd.x > w - 160 ? "right" : "left"; g.fillStyle = hd.col; g.fillText(hd.name + "  " + hd.sub, hd.x + (hd.right || hd.x > w - 160 ? -14 : 14), hd.y - (hd.id === "pre" ? -18 : 0)); }
+  });
+  GEO.H = H;
+  g.fillStyle = "#8f93a3"; g.font = "12px 'Barlow Condensed',sans-serif"; g.textAlign = "left"; g.textBaseline = "bottom";
+  g.fillText("Yellow: decay (sideways) and size (up or down).  Cyan: pre-delay.  Blue: damping.  " + (S.type === 2 || S.type === 3 ? "Orange: shimmer.  " : "") + "Pink: mix.  Double-click a dot to reset it.", P.l + 4, h - P.b - 4);
 }
 function drawEchoes(c) {
   var g = c.g, w = c.w, h = c.h, P = { l: 46, r: 16, t: 24, b: 28 }, pw = w - P.l - P.r, ph = h - P.t - P.b, TOT = 8000, DMIN = -60, m = M.del, d;
@@ -965,74 +1137,187 @@ function drawSpec(c) {
 }
 
 
-function drawRoute(c, ts) {
-  var g = c.g, w = c.w, h = c.h, R = S.route, boxes = [], seq, i, tt = (ts || 0) / 1000;
-  g.fillStyle = "#06080a"; g.fillRect(0, 0, w, h);
-  var bw = Math.min(128, w / 8), bh = 74, cy = h * 0.42, rev = { id: "rev", t: "Reverb", s: ["Plate", "Hall", "Shimmer Plate", "Shimmer Hall", "Velvet"][S.type | 0], col: COL.rev, on: true }, del = { id: "del", t: "Delay", s: fmtMs(S.dtime), col: COL.del, on: true };
-  var inB = { id: "in", t: "In", s: "dry signal", col: "#8f93a3", on: true }, outB = { id: "out", t: "Out", s: "", col: "#8f93a3", on: true };
-  var ifx = { id: "ifx", t: "Input FX", s: "Sat " + Math.round(S.i_mix * 100) + " %", col: COL.blue, on: S.ifx_on }, wfx = { id: "wfx", t: "Wet FX", s: "Boost " + fmtDb(S.w_boost), col: COL.acc, on: S.wfx_on };
-  var cols = R === "par" ? [inB, ifx, null, wfx, outB] : R === "rev" ? [inB, ifx, rev, wfx, outB] : R === "del" ? [inB, ifx, del, wfx, outB] : R === "rd" ? [inB, ifx, rev, del, wfx, outB] : [inB, ifx, del, rev, wfx, outB];
-  var n = cols.length, gap = (w - 40 - n * bw) / (n - 1), pos = [], x0 = 20;
-  for (i = 0; i < n; i++) {
-    var x = x0 + i * (bw + gap), b = cols[i];
-    if (b) { b.x = x; b.y = cy - bh / 2; b.w = bw; b.h = bh; boxes.push(b); pos.push(b); }
-    else { var r2 = rev, d2 = del; r2.x = x; r2.y = cy - bh - 14; r2.w = bw; r2.h = bh; d2.x = x; d2.y = cy + 14; d2.w = bw; d2.h = bh; boxes.push(r2, d2); pos.push({ par: true, x: x, w: bw, ry: r2.y + bh / 2, dy: d2.y + bh / 2 }); }
-  }
-  function wire(x1, y1, x2, y2, on) {
-    g.strokeStyle = on ? "#5b5f6e" : "#2a2c35"; g.lineWidth = 2; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
-    if (on && E.playing) { var d = Math.hypot(x2 - x1, y2 - y1), k = (tt * 0.7) % 1; for (var q = 0; q < 3; q++) { var u = (k + q / 3) % 1; g.fillStyle = "#FFD100"; g.beginPath(); g.arc(x1 + (x2 - x1) * u, y1 + (y2 - y1) * u, 2.6, 0, 6.2832); g.fill(); } }
-    var a = Math.atan2(y2 - y1, x2 - x1); g.fillStyle = on ? "#8f93a3" : "#2a2c35"; g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - 9 * Math.cos(a - 0.4), y2 - 9 * Math.sin(a - 0.4)); g.lineTo(x2 - 9 * Math.cos(a + 0.4), y2 - 9 * Math.sin(a + 0.4)); g.fill();
-  }
-  for (i = 0; i < n - 1; i++) {
-    var A = pos[i], B = pos[i + 1], ax = A.par ? null : A.x + A.w, bx = B.par ? null : B.x, on = true;
-    if (A.par) { wire(A.x + A.w, A.ry, B.x, B.y + B.h / 2, true); wire(A.x + A.w, A.dy, B.x, B.y + B.h / 2, true); }
-    else if (B.par) { wire(ax, cy, B.x, B.ry, true); wire(ax, cy, B.x, B.dy, true); }
-    else wire(ax, cy, bx, cy, true);
-  }
-  var dry = dryGainOf(R), yb = h * 0.86; g.strokeStyle = "#3a3d4a"; g.lineWidth = 2; g.setLineDash([6, 5]); g.beginPath(); g.moveTo(boxes[0].x + bw / 2, boxes[0].y + bh); g.lineTo(boxes[0].x + bw / 2, yb); g.lineTo(boxes[boxes.length - 1].x + bw / 2, yb); g.lineTo(boxes[boxes.length - 1].x + bw / 2, boxes[boxes.length - 1].y + bh + 4); g.stroke(); g.setLineDash([]);
-  g.fillStyle = "#8f93a3"; g.font = "13px 'Barlow Condensed',sans-serif"; g.textAlign = "center"; g.textBaseline = "bottom"; g.fillText("dry path: " + Math.round(dry * 100) + " % of the input goes straight to the output", w / 2, yb - 6);
-  boxes.forEach(function (b) {
-    var live = b.on; g.fillStyle = live ? "#14161c" : "#0c0d11"; g.strokeStyle = live ? b.col : "#3a3d4a"; g.lineWidth = live ? 2 : 1; g.setLineDash(live ? [] : [4, 4]);
-    g.beginPath(); g.roundRect(b.x, b.y, b.w, b.h, 8); g.fill(); g.stroke(); g.setLineDash([]);
-    g.fillStyle = live ? b.col : "#6a6d7a"; g.font = "700 17px 'Barlow Condensed',sans-serif"; g.textAlign = "center"; g.textBaseline = "top"; g.fillText(b.t.toUpperCase() + (live ? "" : "  (off)"), b.x + b.w / 2, b.y + 10);
-    g.fillStyle = "#c9ccd8"; g.font = "11.5px 'JetBrains Mono',monospace"; g.fillText(b.s, b.x + b.w / 2, b.y + 36);
-    if (b.id === "rev" || b.id === "del" || b.id === "ifx" || b.id === "wfx") { g.fillStyle = "#8f93a3"; g.font = "11px 'Barlow Condensed',sans-serif"; g.fillText(b.id === "ifx" || b.id === "wfx" ? "click to switch on/off" : "click to open", b.x + b.w / 2, b.y + b.h - 18); }
+/* ---------- routing diagram: a free node graph ---------- */
+var NODEDEF = {
+  ifx: { t: "Input FX", col: COL.blue, on: "ifx_on", tab: "fx", grp: [1], rows: [["i_hp", "HP"], ["i_lp", "LP"], ["i_mix", "Sat mix"]] },
+  rev: { t: "Reverb", col: COL.rev, on: "rev_on", tab: "reverb", grp: [0], rows: [["decay", "Decay"], ["predelay", "Pre-delay"], ["mix", "Mix"]] },
+  del: { t: "Delay", col: COL.del, on: "del_on", tab: "delay", grp: [0], rows: [["dtime", "Time"], ["dfb", "Feedback"], ["dmix", "Mix"]] },
+  wfx: { t: "Wet FX", col: COL.acc, on: "wfx_on", tab: "fx", grp: [2, 3, 4], rows: [["w_boost", "Boost"], ["w_duck", "Duck"], ["w_width", "Width"]] }
+};
+/* ranges of the values you can drag inside the boxes (same as the knobs) */
+var VR = {
+  decay: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, predelay: { min: 0, max: 250, step: 1, fmt: fmtMs }, mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
+  dtime: { min: 20, max: 2000, log: true, fmt: fmtMs }, dfb: { min: 0, max: 0.95, step: 0.01, fmt: fmtPct }, dmix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
+  i_hp: { min: 20, max: 2000, log: true, fmt: fmtHz }, i_lp: { min: 1000, max: 20000, log: true, fmt: fmtHz }, i_mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
+  w_boost: { min: 0, max: 12, step: 0.1, fmt: fmtDb }, w_duck: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, w_width: { min: 0, max: 2, step: 0.01, fmt: fmtPct }
+};
+function vrN(id, v) { var c = VR[id]; return c.log ? Math.log(v / c.min) / Math.log(c.max / c.min) : (v - c.min) / (c.max - c.min); }
+function vrV(id, n) { var c = VR[id]; n = clamp(n, 0, 1); var v = c.log ? c.min * Math.pow(c.max / c.min, n) : c.min + n * (c.max - c.min); return c.step ? Math.round(v / c.step) * c.step : Math.round(v); }
+function nodeSub(id) { return id === "rev" ? ["Plate", "Hall", "Shimmer Plate", "Shimmer Hall", "Velvet"][S.type | 0] : id === "del" ? (S.dshift > 0 ? "+" : "") + S.dshift + " st per repeat" : id === "ifx" ? "filter + saturation" : "sat, squash, duck, width"; }
+function routeLayout(w, h) {
+  var st = parseGraph(S.graph), N = st.length, C = N + 2, avail = w - 36, endW = 62, maxStack = 1, bh;
+  st.forEach(function (a) { maxStack = Math.max(maxStack, a.length); });
+  bh = clamp(Math.floor((h - 120 - (maxStack - 1) * 10) / maxStack), 66, 108);
+  var nw = clamp((avail - 2 * endW - (C - 1) * 30) / N, 118, 180), gap = (avail - 2 * endW - N * nw) / (C - 1), cy = h * 0.46, x = 18, cols = [], i, j;
+  var inC = { x: x, w: endW, id: "in", boxes: [{ id: "in", x: x, y: cy - 28, w: endW, h: 56 }] }; cols.push(inC); x += endW + gap;
+  st.forEach(function (a, si) {
+    var tot = a.length * bh + (a.length - 1) * 10, y0 = cy - tot / 2, col = { x: x, w: nw, stage: si, boxes: [] };
+    a.forEach(function (id, k) { col.boxes.push({ id: id, x: x, y: y0 + k * (bh + 10), w: nw, h: bh }); }); cols.push(col); x += nw + gap;
   });
-  GEO = { kind: "route", boxes: boxes };
-  g.fillStyle = "#8f93a3"; g.font = "13px 'Barlow Condensed',sans-serif"; g.textAlign = "left"; g.textBaseline = "top"; g.fillText("Wet FX only touches the effect signal, never the dry. No feedback loop between reverb and delay.", 20, 14);
+  cols.push({ x: x, w: endW, id: "out", boxes: [{ id: "out", x: x, y: cy - 28, w: endW, h: 56 }] });
+  return { cols: cols, st: st, bh: bh, cy: cy, gap: gap, endW: endW };
+}
+function rowRects(b) { var def = NODEDEF[b.id], rows = [], y = b.y + 26 + (b.h >= 90 ? 16 : 0), rh = 17, k; for (k = 0; k < def.rows.length; k++) { if (y + rh > b.y + b.h - 3) break; rows.push({ id: def.rows[k][0], label: def.rows[k][1], x: b.x + 8, y: y, w: b.w - 16, h: rh }); y += rh; } return rows; }
+function drawRoute(c, ts) {
+  var g = c.g, w = c.w, h = c.h, tt = (ts || 0) / 1000, L = routeLayout(w, h), cols = L.cols, cy = L.cy, i, j, dgn = dryGainGraph(), act = drag && drag.k === "rn" && drag.moved ? drag : null;
+  g.fillStyle = "#06080a"; g.fillRect(0, 0, w, h);
+  function wire(x1, y1, x2, y2) {
+    g.strokeStyle = "#5b5f6e"; g.lineWidth = 2; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+    if (E.playing) { var k = (tt * 0.7) % 1; for (var q = 0; q < 3; q++) { var u = (k + q / 3) % 1; g.fillStyle = "#FFD100"; g.beginPath(); g.arc(x1 + (x2 - x1) * u, y1 + (y2 - y1) * u, 2.4, 0, 6.2832); g.fill(); } }
+  }
+  /* junctions in the gaps */
+  for (i = 0; i < cols.length - 1; i++) {
+    var A = cols[i], B = cols[i + 1], jx = A.x + A.w + L.gap / 2;
+    A.boxes.forEach(function (b) { wire(b.x + b.w, b.y + b.h / 2, jx, cy); });
+    B.boxes.forEach(function (b) { wire(jx, cy, b.x, b.y + b.h / 2); });
+    var ax = B.x - 2; g.fillStyle = "#8f93a3"; g.beginPath(); g.moveTo(ax, cy); g.lineTo(ax - 8, cy - 4); g.lineTo(ax - 8, cy + 4); g.fill();
+    if (A.boxes.length > 1 || B.boxes.length > 1) { g.fillStyle = "#c9ccd8"; g.beginPath(); g.arc(jx, cy, 3.5, 0, 6.2832); g.fill(); }
+  }
+  /* dry path */
+  var yb = h - 52, f = cols[0].boxes[0], l = cols[cols.length - 1].boxes[0];
+  g.strokeStyle = "#3a3d4a"; g.lineWidth = 2; g.setLineDash([6, 5]); g.beginPath(); g.moveTo(f.x + f.w / 2, f.y + f.h); g.lineTo(f.x + f.w / 2, yb); g.lineTo(l.x + l.w / 2, yb); g.lineTo(l.x + l.w / 2, l.y + l.h + 4); g.stroke(); g.setLineDash([]);
+  g.fillStyle = "#8f93a3"; g.font = "13px 'Barlow Condensed',sans-serif"; g.textAlign = "center"; g.textBaseline = "bottom"; g.fillText("dry path: " + Math.round(dgn * 100) + " % of the input goes straight to the output (wet effects take the rest)", w / 2, yb - 5);
+  /* drop targets while moving a box */
+  var drop = act ? dropTarget(L, act.px, act.py) : null;
+  if (drop) {
+    g.strokeStyle = "#01FCDC"; g.fillStyle = "#01FCDC22";
+    if (drop.kind === "gap") { var gx = drop.x; g.lineWidth = 3; g.beginPath(); g.moveTo(gx, cy - 120); g.lineTo(gx, cy + 120); g.stroke(); g.lineWidth = 1; g.fillStyle = "#01FCDC"; g.font = "12px 'Barlow Condensed',sans-serif"; g.textAlign = "center"; g.textBaseline = "top"; g.fillText("in series here", gx, cy + 124); }
+    else { var cc = cols[drop.col]; g.setLineDash([5, 4]); g.lineWidth = 2; g.fillRect(cc.x - 6, cy - 150, cc.w + 12, 300); g.strokeRect(cc.x - 6, cy - 150, cc.w + 12, 300); g.setLineDash([]); g.lineWidth = 1; g.fillStyle = "#01FCDC"; g.font = "12px 'Barlow Condensed',sans-serif"; g.textAlign = "center"; g.textBaseline = "top"; g.fillText("side by side (parallel)", cc.x + cc.w / 2, cy + 154); }
+  }
+  GEO = { kind: "route", L: L, drop: drop, boxes: [], hov: GEO && GEO.kind === "route" ? GEO.hov : null };
+  cols.forEach(function (col) {
+    col.boxes.forEach(function (b) {
+      var def = NODEDEF[b.id]; GEO.boxes.push(b);
+      if (!def) { g.fillStyle = "#14161c"; g.strokeStyle = "#5b5f6e"; g.lineWidth = 2; g.beginPath(); g.roundRect(b.x, b.y, b.w, b.h, 8); g.fill(); g.stroke(); g.lineWidth = 1; g.fillStyle = "#c9ccd8"; g.font = "700 17px 'Barlow Condensed',sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(b.id === "in" ? "IN" : "OUT", b.x + b.w / 2, b.y + b.h / 2 - 6); g.fillStyle = "#8f93a3"; g.font = "11px 'JetBrains Mono',monospace"; g.fillText(b.id === "in" ? "dry" : "mix", b.x + b.w / 2, b.y + b.h / 2 + 12); return; }
+      var on = !!S[def.on], moving = act && act.id === b.id; g.globalAlpha = moving ? 0.35 : 1;
+      g.fillStyle = on ? "#14161c" : "#0c0d11"; g.strokeStyle = on ? def.col : "#3a3d4a"; g.lineWidth = on ? 2 : 1; g.setLineDash(on ? [] : [4, 4]);
+      g.beginPath(); g.roundRect(b.x, b.y, b.w, b.h, 8); g.fill(); g.stroke(); g.setLineDash([]); g.lineWidth = 1;
+      /* power icon (top left) and open-tab icon (top right) */
+      var px = b.x + 15, py = b.y + 15, ox = b.x + b.w - 24, oy = b.y + 7;
+      g.strokeStyle = on ? def.col : "#6a6d7a"; g.lineWidth = 2; g.beginPath(); g.arc(px, py + 1, 6, -1.0, 4.14); g.stroke(); g.beginPath(); g.moveTo(px, py - 7); g.lineTo(px, py); g.stroke();
+      g.lineWidth = 1.5; g.strokeStyle = "#c9ccd8"; g.beginPath(); g.rect(ox + 1, oy + 4, 10, 10); g.stroke(); g.beginPath(); g.moveTo(ox + 6, oy + 9); g.lineTo(ox + 15, oy); g.moveTo(ox + 9, oy); g.lineTo(ox + 15, oy); g.lineTo(ox + 15, oy + 6); g.stroke(); g.lineWidth = 1;
+      g.fillStyle = on ? def.col : "#6a6d7a"; g.font = "700 17px 'Barlow Condensed',sans-serif"; g.textAlign = "center"; g.textBaseline = "top"; g.fillText(def.t.toUpperCase() + (on ? "" : "  (off)"), b.x + b.w / 2, b.y + 6);
+      if (b.h >= 90) { g.fillStyle = "#8f93a3"; g.font = "11px 'Barlow Condensed',sans-serif"; g.fillText(nodeSub(b.id), b.x + b.w / 2, b.y + 27); }
+      rowRects(b).forEach(function (r) {
+        var hv = GEO.hov === b.id + ":" + r.id || (drag && drag.k === "rv2" && drag.row === r.id && drag.id === b.id);
+        g.fillStyle = hv ? "#232632" : "#0e1015"; g.beginPath(); g.roundRect(r.x, r.y, r.w, r.h - 2, 3); g.fill();
+        var nn = vrN(r.id, S[r.id]); g.fillStyle = (on ? def.col : "#555a66") + "44"; g.fillRect(r.x, r.y, r.w * clamp(nn, 0, 1), r.h - 2);
+        g.font = "11px 'Barlow Condensed',sans-serif"; g.textBaseline = "middle"; g.textAlign = "left"; g.fillStyle = "#aab0c0"; g.fillText(r.label, r.x + 5, r.y + r.h / 2 - 1);
+        g.font = "11.5px 'JetBrains Mono',monospace"; g.textAlign = "right"; g.fillStyle = hv ? "#fff" : "#e8eaf2"; g.fillText(VR[r.id].fmt(S[r.id]), r.x + r.w - 5, r.y + r.h / 2 - 1);
+      });
+      g.globalAlpha = 1;
+    });
+  });
+  if (act) { var def2 = NODEDEF[act.id], gw = act.bw, gh = act.bh; g.globalAlpha = 0.9; g.fillStyle = "#14161c"; g.strokeStyle = def2.col; g.lineWidth = 2; g.beginPath(); g.roundRect(act.px - act.ox, act.py - act.oy, gw, gh, 8); g.fill(); g.stroke(); g.lineWidth = 1; g.fillStyle = def2.col; g.font = "700 17px 'Barlow Condensed',sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(def2.t.toUpperCase(), act.px - act.ox + gw / 2, act.py - act.oy + gh / 2); g.globalAlpha = 1; }
+  g.fillStyle = "#8f93a3"; g.font = "13px 'Barlow Condensed',sans-serif"; g.textAlign = "left"; g.textBaseline = "top";
+  g.fillText("Drag a box to move it: drop between two columns for in series, or on a column for side by side.", 18, 12);
+  g.fillText("Power icon: bypass.  Arrow icon: jump to its controls.  Hold a number and drag up or down to change it (Shift = fine, double-click = reset).", 18, 30);
+}
+/* where would a dragged box land? gaps (new column) or a column (parallel) */
+function dropTarget(L, x, y) {
+  var cols = L.cols, i;
+  for (i = 1; i < cols.length - 1; i++) { var c = cols[i]; if (x >= c.x - 6 && x <= c.x + c.w + 6) return { kind: "col", col: i, stage: c.stage }; }
+  var best = 0, bd = 1e9; for (i = 0; i < cols.length - 1; i++) { var gx = cols[i].x + cols[i].w + L.gap / 2, dd = Math.abs(x - gx); if (dd < bd) { bd = dd; best = i; } }
+  return { kind: "gap", at: best, x: cols[best].x + cols[best].w + L.gap / 2 };   /* at = index among node stages to insert before */
+}
+function moveNode(id, d) {
+  var st = parseGraph(S.graph).map(function (a) { return a.slice(); }), from = -1, i;
+  st.forEach(function (a, si) { if (a.indexOf(id) >= 0) from = si; });
+  if (d.kind === "col") { if (d.stage === from) return; st[d.stage].push(id); }
+  else { st.splice(d.at, 0, [id]); if (from >= d.at) from++; }
+  st[from] = st[from].filter(function (x) { return x !== id; }); if (d.kind === "col") { /* from index unchanged */ }
+  setParam("graph", graphStr(st), true);
+}
+function flashGroups(list) { list.forEach(function (g) { g.classList.remove("flash"); void g.offsetWidth; g.classList.add("flash"); }); }
+function openNode(id) {
+  var def = NODEDEF[id];
+  if (def.tab !== "fx") setParam("mode", def.tab, true);
+  var host = def.tab === "reverb" ? $$("#fxR .g3") : def.tab === "delay" ? $$("#fxD .g3") : FXG;
+  setTimeout(function () { flashGroups(def.grp.map(function (k) { return host[k]; }).filter(Boolean)); }, 30);
 }
 
 /* ---------- mouse on the display ---------- */
 var drag = null;
 function mpos(e) { var r = cv.getBoundingClientRect(), k = cv.clientWidth / r.width; return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k }; }
+function inR(p, r) { return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h; }
+function routeHit(p) {
+  if (!GEO || GEO.kind !== "route") return null;
+  for (var i = 0; i < GEO.boxes.length; i++) {
+    var b = GEO.boxes[i]; if (!NODEDEF[b.id] || !inR(p, b)) continue;
+    if (Math.hypot(p.x - (b.x + 15), p.y - (b.y + 16)) < 11) return { t: "pwr", b: b };
+    if (inR(p, { x: b.x + b.w - 26, y: b.y + 4, w: 22, h: 20 })) return { t: "open", b: b };
+    var rr = rowRects(b); for (var k = 0; k < rr.length; k++) if (inR(p, rr[k])) return { t: "row", b: b, r: rr[k] };
+    return { t: "body", b: b };
+  }
+  return null;
+}
+function revHit(p) { if (!GEO || GEO.kind !== "rev" || !GEO.H) return null; var best = null, bd = 17; GEO.H.forEach(function (hd) { var dd = Math.hypot(p.x - hd.x, p.y - hd.y); if (dd <= bd) { bd = dd; best = hd; } }); return best; }
 cv.addEventListener("pointerdown", function (e) {
   if (!GEO) return; var p = mpos(e), P = GEO.P;
-  if (GEO.kind === "route") { GEO.boxes.forEach(function (b) { if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { if (b.id === "ifx") setParam("ifx_on", !S.ifx_on, true); else if (b.id === "wfx") setParam("wfx_on", !S.wfx_on, true); else if (b.id === "rev") setParam("mode", "reverb", true); else if (b.id === "del") setParam("mode", "delay", true); } }); return; }
-  if (GEO.kind === "rev" && GEO.hx !== undefined && Math.hypot(p.x - GEO.hx, p.y - GEO.hy) < 16) drag = { k: "rev", x0: p.x, d0: S.decay, live: p.x };
+  if (GEO.kind === "route") {
+    var h = routeHit(p); if (!h) return;
+    if (h.t === "pwr") { setParam(NODEDEF[h.b.id].on, !S[NODEDEF[h.b.id].on], true); return; }
+    if (h.t === "open") { openNode(h.b.id); return; }
+    if (h.t === "row") { drag = { k: "rv2", id: h.b.id, row: h.r.id, y0: p.y, n0: vrN(h.r.id, S[h.r.id]) }; }
+    else drag = { k: "rn", id: h.b.id, x0: p.x, y0: p.y, px: p.x, py: p.y, ox: p.x - h.b.x, oy: p.y - h.b.y, bw: h.b.w, bh: h.b.h, moved: false };
+    cv.setPointerCapture(e.pointerId); e.preventDefault(); hideTip(); return;
+  }
+  if (GEO.kind === "rev") { var hd = revHit(p); if (hd) drag = { k: "rv", h: hd.id, x0: p.x, y0: p.y, d0: S.decay, s0: S.size, pre0: S.predelay, dm0: S.damp, sh0: S.shimmer, lx: p.x, ly: p.y }; }
   else if (GEO.kind === "del" && GEO.h) { for (var i = 0; i < GEO.h.length; i++) if (Math.hypot(p.x - GEO.h[i][0], p.y - GEO.h[i][1]) < 16) { drag = { k: "del", i: i, y1: GEO.h[0][1] }; break; } }
   else if (GEO.kind === "spec") { var best = null, bd = 14; GEO.L.forEach(function (ln) { var dx = Math.abs(p.x - (P.l + fxp(ln.f, GEO.pw))); if (dx < bd) { bd = dx; best = ln; } }); if (best) drag = { k: "spec", ln: best }; }
   if (drag) { cv.setPointerCapture(e.pointerId); e.preventDefault(); hideTip(); }
 });
 cv.addEventListener("pointermove", function (e) {
   var p = mpos(e);
-  if (!drag && GEO && GEO.kind === "route") { cv.style.cursor = GEO.boxes.some(function (b) { return b.id !== "in" && b.id !== "out" && p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h; }) ? "pointer" : "default"; return; }
-  if (!drag) { var over = false; if (GEO) { if (GEO.kind === "rev" && GEO.hx !== undefined) over = Math.hypot(p.x - GEO.hx, p.y - GEO.hy) < 16; else if (GEO.kind === "del" && GEO.h) over = GEO.h.some(function (hd) { return Math.hypot(p.x - hd[0], p.y - hd[1]) < 16; }); else if (GEO.kind === "spec") over = GEO.L.some(function (ln) { return Math.abs(p.x - (GEO.P.l + fxp(ln.f, GEO.pw))) < 14; }); } cv.style.cursor = over ? (GEO.kind === "del" && false ? "ns-resize" : "grab") : "default"; return; }
+  if (!drag) {
+    var cur = "default";
+    if (GEO && GEO.kind === "route") { var h = routeHit(p); GEO.hov = h && h.t === "row" ? h.b.id + ":" + h.r.id : null; cur = !h ? "default" : h.t === "row" ? "ns-resize" : h.t === "body" ? "grab" : "pointer"; }
+    else if (GEO && GEO.kind === "rev") { var hd = revHit(p); GEO.hov = hd ? hd.id : null; cur = hd ? "grab" : "default"; }
+    else if (GEO && GEO.kind === "del" && GEO.h) cur = GEO.h.some(function (hd2) { return Math.hypot(p.x - hd2[0], p.y - hd2[1]) < 16; }) ? "grab" : "default";
+    else if (GEO && GEO.kind === "spec") cur = GEO.L.some(function (ln) { return Math.abs(p.x - (GEO.P.l + fxp(ln.f, GEO.pw))) < 14; }) ? "grab" : "default";
+    cv.style.cursor = cur; return;
+  }
   var P = GEO.P;
-  if (drag.k === "rev") { drag.live = p.x; setParam("decay", clamp(Math.round((drag.d0 + (p.x - drag.x0) / GEO.pw * 0.6) * 100) / 100, 0, 1), true); }
-  else if (drag.k === "del") {
+  if (drag.k === "rv2") { setParam(drag.row, vrV(drag.row, drag.n0 + (drag.y0 - p.y) / (e.shiftKey ? 700 : 160)), true); return; }
+  if (drag.k === "rn") { drag.px = p.x; drag.py = p.y; if (!drag.moved && Math.hypot(p.x - drag.x0, p.y - drag.y0) > 5) drag.moved = true; cv.style.cursor = "grabbing"; return; }
+  if (drag.k === "rv") {
+    var dx = p.x - drag.x0, dy = p.y - drag.y0, fine = e.shiftKey ? 0.25 : 1; drag.lx = p.x; drag.ly = p.y;
+    if (drag.h === "yel") { setParam("decay", clamp(Math.round((drag.d0 + dx / GEO.pw * 0.6 * fine) * 100) / 100, 0, 1), true); setParam("size", clamp(Math.round((drag.s0 - dy / (GEO.ph - 20) * 1.1 * fine) * 100) / 100, 0.5, 1.6), true); }
+    else if (drag.h === "pre") setParam("predelay", clamp(Math.round(drag.pre0 + dx / GEO.pw * 12000 * 0.35 * fine), 0, 250), true);
+    else if (drag.h === "damp") setParam("damp", clamp(Math.round(drag.dm0 * Math.pow(32, -dy / GEO.ph * fine)), 500, 16000), true);
+    else if (drag.h === "shim") setParam("shimmer", clamp(Math.round((drag.sh0 - dy / GEO.ph * 1.2 * fine) * 100) / 100, 0, 1), true);
+    else if (drag.h === "mix") { var m0 = P.t + 14, m1 = GEO.P.t + GEO.ph - 10 + 0; setParam("mix", clamp(Math.round((m1 - p.y) / (m1 - m0) * 100) / 100, 0, 1), true); }
+    return;
+  }
+  if (drag.k === "del") {
     if (drag.i === 0) { var ms = (p.x - P.l) / GEO.pw * GEO.TOT; setParam("dtime", clamp(Math.round(ms), 20, 2000), true); }
     else if (M.del && M.del.bars.length > 1) {
-      var b1 = M.del.bars[0], b2 = M.del.bars[1], y1 = P.t + (-clamp(b1.db, -60, 0)) / 60 * GEO.ph, bot = P.t + GEO.ph, target = clamp((bot - p.y) / Math.max(8, bot - y1), 0.02, 1.2), cur = Math.pow(10, (b2.db - b1.db) / 20);
-      setParam("dfb", clamp(Math.round(S.dfb * (target / Math.max(cur, 0.02)) * 100) / 100, 0, 0.95), true);
+      var b1 = M.del.bars[0], b2 = M.del.bars[1], y1 = P.t + (-clamp(b1.db, -60, 0)) / 60 * GEO.ph, bot = P.t + GEO.ph, target = clamp((bot - p.y) / Math.max(8, bot - y1), 0.02, 1.2), cur2 = Math.pow(10, (b2.db - b1.db) / 20);
+      setParam("dfb", clamp(Math.round(S.dfb * (target / Math.max(cur2, 0.02)) * 100) / 100, 0, 0.95), true);
     }
   } else if (drag.k === "spec") { var ln = drag.ln, f = xfp(clamp(p.x - P.l, 0, GEO.pw), GEO.pw), lo = { hp: 20, damp: 500, lp: 1000, ddamp: 500, i_hp: 20, i_lp: 1000 }[ln.id], hi = { hp: 2000, damp: 16000, lp: 20000, ddamp: 16000, i_hp: 2000, i_lp: 20000 }[ln.id]; setParam(ln.id, Math.round(clamp(f, lo, hi)), true); }
 });
-function endDrag() { if (!drag) return; drag = null; schedMeasure(); }
+function endDrag() {
+  if (!drag) return; var d = drag;
+  if (d.k === "rn" && d.moved && GEO && GEO.kind === "route") { var dt = dropTarget(GEO.L, d.px, d.py); drag = null; moveNode(d.id, dt); cv.style.cursor = "default"; return; }
+  drag = null; schedMeasure();
+}
 cv.addEventListener("pointerup", endDrag); cv.addEventListener("pointercancel", endDrag);
 cv.addEventListener("dblclick", function (e) {
   if (!GEO) return; var p = mpos(e), P = GEO.P;
+  if (GEO.kind === "route") { var h = routeHit(p); if (h && h.t === "row") setParam(h.r.id, DEF[h.r.id], true); return; }
   if (GEO.kind === "spec") GEO.L.forEach(function (ln) { if (Math.abs(p.x - (P.l + fxp(ln.f, GEO.pw))) < 14) setParam(ln.id, ln.dflt, true); });
-  else if (GEO.kind === "rev") setParam("decay", DEF.decay, true);
+  else if (GEO.kind === "rev") { var hd = revHit(p); if (!hd) return; var rs = { yel: ["decay", "size"], pre: ["predelay"], damp: ["damp"], shim: ["shimmer"], mix: ["mix"] }[hd.id]; rs.forEach(function (k) { setParam(k, DEF[k], true); }); }
 });
 
 /* ---------- meters ---------- */
@@ -1092,26 +1377,85 @@ var FACT_D = [
   dpr("Lead Echo (dotted 1/8 at 150)", { dtime: 300, dfb: 0.4, dshim: 0.3, ddamp: 6500, dmix: 0.25 }),
   dpr("Ambient Cloud", { dtime: 1200, dfb: 0.8, dshim: 0.8, ddamp: 4000, dmix: 0.5 })
 ];
+var G0 = "ifx>rev>del>wfx";
+function fp(name, o) { var v = { graph: G0, rev_on: true, del_on: false, ifx_on: true, wfx_on: true, i_hp: 20, i_lp: 20000, i_drive: 6, i_mix: 0, w_drive: 8, w_smix: 0, w_depth: 0.6, w_qmix: 0, w_duck: 0, w_drel: 250, w_dmode: "follow", w_dsrc: "input", w_dshape: 0, w_drate: 2, w_dratio: 1, w_bpm: 140, w_width: 1, w_boost: 0 }; for (var k in o) v[k] = o[k]; return { name: name, v: v }; }
 var FACT_F = [
-  { name: "Clean (nothing added)", v: { route: "rev", ifx_on: true, wfx_on: true, i_hp: 20, i_lp: 20000, i_drive: 6, i_mix: 0, w_drive: 8, w_smix: 0, w_depth: 0.6, w_qmix: 0, w_duck: 0, w_drel: 250, w_width: 1, w_boost: 0 } },
-  { name: "Reverb into Delay", v: { route: "rd", w_boost: 0 } },
-  { name: "Delay into Reverb", v: { route: "dr" } },
-  { name: "Parallel Space", v: { route: "par", w_width: 1.3 } },
-  { name: "Tail Lift (squash)", v: { route: "rev", w_qmix: 0.6, w_depth: 0.7, w_boost: 2 } },
-  { name: "Pumping Tail (duck)", v: { route: "rev", w_duck: 0.7, w_drel: 220, w_boost: 3 } },
-  { name: "Dirty Dark Tail", v: { route: "rev", w_smix: 0.5, w_drive: 14, i_hp: 150, w_boost: 1 } },
-  { name: "Wide Bright Wash", v: { route: "par", w_width: 1.6, w_qmix: 0.35, w_depth: 0.5, w_boost: 2 } },
-  { name: "Lead Space (HP in, duck)", v: { route: "rd", i_hp: 250, w_duck: 0.5, w_drel: 300, w_qmix: 0.25 } }
+  fp("Clean (reverb only)", {}),
+  fp("Delay only", { rev_on: false, del_on: true }),
+  fp("Reverb into Delay", { del_on: true }),
+  fp("Delay into Reverb", { graph: "ifx>del>rev>wfx", del_on: true }),
+  fp("Parallel Space", { graph: "ifx>rev|del>wfx", del_on: true, w_width: 1.3 }),
+  fp("FX between Delay and Reverb", { graph: "ifx>del>wfx>rev", del_on: true, w_smix: 0.4, w_drive: 12 }),
+  fp("Tail Lift (squash)", { w_qmix: 0.6, w_depth: 0.7, w_boost: 2 }),
+  fp("Pumping Tail (follow duck)", { w_duck: 0.7, w_drel: 220, w_boost: 3 }),
+  fp("Sync Pump 1/4 (rig kick)", { w_duck: 0.85, w_dmode: "sync", w_dsrc: "kick", w_dratio: 1, w_dshape: 0, w_boost: 3 }),
+  fp("Trance Gate 1/16", { w_duck: 0.9, w_dmode: "sync", w_dsrc: "none", w_dratio: 0.25, w_dshape: 3, w_boost: 2 }),
+  fp("Offbeat Swell 1/2", { w_duck: 0.8, w_dmode: "sync", w_dsrc: "off", w_dratio: 2, w_dshape: 4, w_boost: 2 }),
+  fp("Dirty Dark Tail", { w_smix: 0.5, w_drive: 14, i_hp: 150, w_boost: 1 }),
+  fp("Wide Bright Wash", { graph: "ifx>rev|del>wfx", del_on: true, w_width: 1.6, w_qmix: 0.35, w_depth: 0.5, w_boost: 2 }),
+  fp("Lead Space (HP in, duck)", { del_on: true, i_hp: 250, w_duck: 0.5, w_drel: 300, w_qmix: 0.25 })
 ];
+/* old saved presets used a single 'route' value; turn it into the graph */
+function legacyRoute(v) {
+  if (!v || typeof v.route !== "string") return; var r = v.route;
+  var m = { rev: [G0, 1, 0], del: [G0, 0, 1], rd: [G0, 1, 1], dr: ["ifx>del>rev>wfx", 1, 1], par: ["ifx>rev|del>wfx", 1, 1] }[r]; if (!m) return;
+  setParam("graph", m[0], true); setParam("rev_on", !!m[1], true); setParam("del_on", !!m[2], true);
+}
+/* per tab presets keep what the other tabs hold; switching tab does not change the sound */
+var TABSET = { reverb: [FACT_R, RK], delay: [FACT_D, DK], fx: [FACT_F, FK] }, LASTPRE = { reverb: "Init", delay: "Init", fx: "Init" };
+function tabPresets(mode) {
+  var t = TABSET[mode]; PRE.factory = t[0]; PRE.keys = t[1]; PRE.ukey = KIT.key + "." + mode + ".user.v1"; var u = store(PRE.ukey);
+  PRE.user = Array.isArray(u) ? u.filter(function (p) { return p && typeof p.name === "string" && p.v && typeof p.v === "object"; }) : [];
+  rebuildPre(); var ix = -1; PRE.list.forEach(function (p, i) { if (p.name === LASTPRE[mode]) ix = i; }); PRE.idx = ix < 0 ? 0 : ix; $("#pNameT").textContent = ix < 0 ? "Custom" : PRE.list[ix].name;
+}
 PRE.ukey = KIT.key + ".reverb.user.v1";
-initPresets(FACT_R, RK, function () { dimGroups(); schedMeasure(); });
+initPresets(FACT_R, RK, function (p) { LASTPRE[S.mode] = p.name; legacyRoute(p.v); dimGroups(); schedMeasure(); });
+
+/* ---------- main presets: the whole plugin (reverb, delay and FX and routing) in one ---------- */
+function mainBase() { var v = {}; MK.forEach(function (k) { v[k] = DEF[k]; }); return v; }
+function mp(name, parts) { var v = mainBase(); parts.forEach(function (p) { for (var k in p.v) v[k] = p.v[k]; }); return { name: name, v: v }; }
+function R_(n) { return FACT_R.filter(function (p) { return p.name === n; })[0]; }
+function D_(n) { return FACT_D.filter(function (p) { return p.name === n; })[0]; }
+function F_(n) { return FACT_F.filter(function (p) { return p.name === n; })[0]; }
+var MAIN_F = [
+  mp("Init (reverb only)", [{ v: { type: 3, decay: 0.6, mix: 0.35 } }]),
+  mp("Hoover Lead Space", [R_("Hoover Lead Tail"), D_("Lead Echo (dotted 1/8 at 150)"), F_("Lead Space (HP in, duck)"), { v: { w_bpm: 150 } }]),
+  mp("Trance Pluck Wash", [R_("Trance Pluck Space"), D_("Subtle Shimmer Slap"), F_("Parallel Space"), { v: { w_bpm: 138 } }]),
+  mp("Pumping Shimmer Pad", [R_("Shimmer Pad Bloom"), D_("Octave Echo"), F_("Sync Pump 1/4 (rig kick)"), { v: { del_on: false } }]),
+  mp("Octave Cathedral + Echo", [R_("Octave Up Cathedral"), D_("Rising Stairs"), F_("Reverb into Delay"), { v: { w_boost: 2 } }]),
+  mp("Delay Clouds into Reverb", [R_("Down Drone"), D_("Ambient Cloud"), F_("Delay into Reverb"), { v: { w_qmix: 0.3, w_depth: 0.5 } }]),
+  mp("FX Between: Dirty Echo Tail", [R_("Velvet Wash"), D_("Plain Dark Delay"), F_("FX between Delay and Reverb")]),
+  mp("Trance Gate Tail", [R_("Plate Snare"), D_("Falling Stairs"), F_("Trance Gate 1/16"), { v: { del_on: true, w_bpm: 140 } }])
+];
+var MAINU = "shimmerstuff.main.user.v1", mainUser = [], mainIdx = 0;
+(function () {
+  var u = store(MAINU); mainUser = Array.isArray(u) ? u.filter(function (p) { return p && typeof p.name === "string" && p.v && typeof p.v === "object"; }) : [];
+  var sel = $("#mpSel");
+  function list() { return MAIN_F.map(function (p) { return { name: p.name, v: p.v, u: false }; }).concat(mainUser.map(function (p) { return { name: p.name, v: p.v, u: true }; })); }
+  function fill(keep) { var l = list(); sel.innerHTML = '<option value="-1">Main preset: choose...</option>' + l.map(function (p, i) { return '<option value="' + i + '">' + (p.u ? "[yours] " : "") + esc(p.name) + "</option>"; }).join(""); sel.value = String(keep === undefined ? -1 : keep); $("#mpDel").hidden = !(+sel.value >= MAIN_F.length); }
+  fill(-1);
+  sel.addEventListener("change", function () {
+    var i = +sel.value; $("#mpDel").hidden = !(i >= MAIN_F.length); if (i < 0) return; var p = list()[i];
+    MK.forEach(function (k) { if (k in p.v) { var v = p.v[k]; if (typeof DEF[k] === "number" && typeof v === "number" && isFinite(v)) setParam(k, v, true); else if (typeof DEF[k] === "boolean") setParam(k, !!v, true); else if (typeof DEF[k] === "string" && typeof v === "string") setParam(k, v, true); } });
+    dimGroups(); routeNote(); schedMeasure(); ["reverb", "delay", "fx"].forEach(function (m) { LASTPRE[m] = "Custom"; }); $("#pNameT").textContent = "Custom";
+  });
+  $("#mpSave").addEventListener("click", function () {
+    openCard('<h2>Save main preset</h2><p>Saves the reverb, the delay and the FX and routing together, as they are now.</p><div class="fld"><span>Name</span><input type="text" id="mpName" maxlength="40" value="My main preset"></div><div class="row"><button data-close>Cancel</button><button id="mpOk" class="on">Save</button></div>');
+    var inp = $("#mpName"); inp.focus(); inp.select();
+    $("#mpOk").addEventListener("click", function () { var n = inp.value.trim().slice(0, 40) || "My main preset", v = {}; MK.forEach(function (k) { v[k] = S[k]; }); mainUser = mainUser.filter(function (p) { return p.name !== n; }); mainUser.push({ name: n, v: v }); store(MAINU, mainUser); fill(MAIN_F.length + mainUser.length - 1); closeCard(); });
+  });
+  $("#mpDel").addEventListener("click", function () { var i = +sel.value - MAIN_F.length; if (i >= 0) { mainUser.splice(i, 1); store(MAINU, mainUser); fill(-1); } });
+  attachTip($("#mpSel"), "Main preset", "One preset for the whole plugin: it sets the reverb, the delay and the FX and routing tabs together. The preset list at the top still has the presets of the tab you are on.");
+  attachTip($("#mpSave"), "Save main preset", "Saves everything on all three tabs as one preset (stays on this device).");
+  attachTip($("#mpDel"), "Delete", "Deletes the main preset you have selected (only your own).");
+})();
 
 /* ---------- cards ---------- */
 $("#bSet").addEventListener("click", settingsCard);
 $("#bAbout").addEventListener("click", function () { aboutCard("shimmerstuff", "<p>Two plugins in one repo: <b>Shimmer Reverb</b> (plate, hall, shimmer plate, shimmer hall, velvet) and <b>Shimmer Delay</b> (repeats that climb or fall in pitch). Both are VST3 and Standalone.</p>"); });
 $("#bHelp").addEventListener("click", function () {
   openCard("<h2>Quick guide</h2><h3>Two plugins</h3><p>Use the two tabs under the header to switch between Shimmer Reverb and Shimmer Delay. Each has its own presets.</p>" +
-    "<h3>FX and Routing</h3><p>The third tab connects the two effects (reverb only, delay only, reverb into delay, delay into reverb, or parallel) and adds input filters and saturation, plus saturation, squash, duck, width and boost on the effect signal only.</p><h3>Views</h3><ul><li><b>Decay (reverb):</b> the tail measured from the real DSP with an impulse. Drag the yellow dot sideways to change the Decay.</li><li><b>Echoes (delay):</b> every repeat with its level and pitch. Drag the first dot for Time, the second for Feedback.</li><li><b>Tone:</b> live spectrum. Drag the lines for damping and the wet filters.</li></ul>" +
+    "<h3>FX and Routing</h3><p>The third tab is a free routing diagram with Input FX, Reverb, Delay and Wet FX. Drag a box between two columns to put it in series, or onto a column to run it side by side with what is there. The power icon bypasses a box, the arrow icon jumps to its controls, and you can change the numbers inside a box by holding them and dragging up or down. Wet FX has saturation, squash, duck (with an optional sidechain source, free or BPM synced shapes), width and boost, and only touches the effect signal.</p><h3>Main preset</h3><p>The Main preset menu next to the tabs sets the reverb, the delay and the routing together. The preset list at the top still holds the presets of the tab you are on.</p><h3>Views</h3><ul><li><b>Decay (reverb):</b> the tail measured from the real DSP with an impulse. Yellow dot: sideways is Decay, up or down is Size. Cyan: pre-delay. Blue: damping. Orange: shimmer. Pink slider: mix. The purple curve follows while you drag.</li><li><b>Echoes (delay):</b> every repeat with its level and pitch. Drag the first dot for Time, the second for Feedback.</li><li><b>Tone:</b> live spectrum. Drag the lines for damping and the wet filters.</li></ul>" +
     "<h3>Start here</h3><ul><li>Choose 'Single click' as the test signal and press Play to hear the tail alone.</li><li>Pick a preset, then move the knobs and watch the display follow.</li><li>Clear tail empties the reverb or delay at once.</li><li>Compare: bypass switches to the dry signal.</li></ul><div class='row'><button data-close>Close</button></div>");
 });
 setModeUI(); dimGroups(); selectPre(0); initWin(); schedMeasure();
