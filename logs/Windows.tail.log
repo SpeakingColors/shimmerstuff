@@ -1,0 +1,168 @@
+-- Building for: Visual Studio 18 2026
+-- The C compiler identification is MSVC 19.51.36260.0
+-- The CXX compiler identification is MSVC 19.51.36260.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/cl.exe - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/cl.exe - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring juceaide
+-- Building juceaide
+-- Exporting juceaide
+-- Testing juceaide
+-- Finished setting up juceaide
+CMake Warning at build/_deps/juce-src/extras/Build/CMake/JUCEUtils.cmake:1769 (message):
+  Target Shimmerstuff has JUCE_BUNDLE_ID 'com.Studio 87.Shimmerstuff', which
+  contains spaces.  Use the BUNDLE_ID option to specify a valid ID.
+Call Stack (most recent call first):
+  build/_deps/juce-src/extras/Build/CMake/JUCEUtils.cmake:2165 (_juce_set_fallback_properties)
+  build/_deps/juce-src/extras/Build/CMake/JUCEUtils.cmake:2248 (_juce_initialise_target)
+  CMakeLists.txt:11 (juce_add_plugin)
+
+
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Failed
+-- Looking for pthread_create in pthreads
+-- Looking for pthread_create in pthreads - not found
+-- Looking for pthread_create in pthread
+-- Looking for pthread_create in pthread - not found
+-- Found Threads: TRUE
+-- Configuring done (128.6s)
+-- Generating done (0.2s)
+CMake Warning (unused-cli):
+  Manually-specified variables were not used by the project:
+
+    CMAKE_BUILD_TYPE
+
+
+-- Build files have been written to: D:/a/shimmerstuff/shimmerstuff/build
+MSBuild version 18.10.1-1.26427.6+3cd27c13e for .NET Framework
+
+  Checking File Globs
+  1>Checking Build System
+  Generating Shimmerstuff_artefacts/JuceLibraryCode/Shimmerstuff_resources.rc
+  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
+  Building VST3 manifest helper for Shimmerstuff
+  Shimmerstuff_rc_lib.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff_rc_lib.dir\Release\Shimmerstuff_rc_lib.lib
+  -- The CXX compiler identification is MSVC 19.51.36260.0
+  -- Detecting CXX compiler ABI info
+  -- Detecting CXX compiler ABI info - done
+  -- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/cl.exe - skipped
+  -- Detecting CXX compile features
+  -- Detecting CXX compile features - done
+  -- Configuring done (1.9s)
+  -- Generating done (0.0s)
+  -- Build files have been written to: D:/a/shimmerstuff/shimmerstuff/build/vst3_helpers/Shimmerstuff
+  MSBuild version 18.10.1-1.26427.6+3cd27c13e for .NET Framework
+  
+    1>Checking Build System
+    Building Custom Rule D:/a/shimmerstuff/shimmerstuff/build/_deps/juce-src/extras/Build/CMake/juce_vst3_helper/CMakeLists.txt
+    juce_VST3ManifestHelper.cpp
+    vst3_helper.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\vst3_helpers\Shimmerstuff\vst3_helper.exe
+    Building Custom Rule D:/a/shimmerstuff/shimmerstuff/build/_deps/juce-src/extras/Build/CMake/juce_vst3_helper/CMakeLists.txt
+  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
+  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/build/_deps/cat_ui-src/CMakeLists.txt
+  CatLookAndFeel.cpp
+  CatFrame.cpp
+  juce_gui_basics.cpp
+  juce_gui_basics_2.cpp
+  juce_gui_basics_3.cpp
+  juce_gui_basics_4.cpp
+  juce_gui_basics_5.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_events.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_data_structures.cpp
+  juce_graphics_Sheenbidi.c
+  cat_ui.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\_deps\cat_ui-build\Release\cat_ui.lib
+  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
+  PluginProcessor.cpp
+  PluginEditor.cpp
+  juce_audio_processors.cpp
+  juce_gui_extra.cpp
+C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244: 'initializing': conversion from '_Ty' to '_Ty2', possible loss of data [D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244:         with [D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244:         [ [D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244:             _Ty=int [D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244:         ] [D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244:         and [D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244:         [ [D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244:             _Ty2=float [D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244:         ] [D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff.vcxproj]
+  (compiling source file '../src/PluginProcessor.cpp')
+      C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54):
+      the template instantiation context (the oldest one first) is
+          D:\a\shimmerstuff\shimmerstuff\src\PluginProcessor.cpp(36,53):
+          see reference to function template instantiation 'std::pair<const char *,float>::pair<const char(&)[7],int,0>(_Other1,_Other2 &&) noexcept' being compiled
+          with
+          [
+              _Other1=const char (&)[7],
+              _Other2=int
+          ]
+              D:\a\shimmerstuff\shimmerstuff\src\PluginProcessor.cpp(35,42):
+              see the first reference to 'std::pair<const char *,float>::pair' in '`anonymous-namespace'::presets'
+  
+  juce_gui_basics.cpp
+  juce_gui_basics_2.cpp
+  juce_gui_basics_3.cpp
+  juce_gui_basics_4.cpp
+D:\a\shimmerstuff\shimmerstuff\build\_deps\juce-src\modules\juce_gui_basics\juce_gui_basics.cpp(61): warning : This version of JUCE does not use the splash screen, the flag JUCE_DISPLAY_SPLASH_SCREEN is ignored [D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff.vcxproj]
+  juce_gui_basics_5.cpp
+  juce_graphics.cpp
+  juce_graphics_Harfbuzz.cpp
+  juce_events.cpp
+  juce_core.cpp
+  juce_core_CompilationTime.cpp
+  juce_data_structures.cpp
+  juce_audio_processors_headless.cpp
+  juce_audio_processors_headless_ara.cpp
+  juce_audio_processors_headless_lv2_libs.cpp
+  juce_audio_basics.cpp
+  juce_audio_utils.cpp
+  juce_audio_formats.cpp
+  juce_audio_devices.cpp
+  juce_graphics_Sheenbidi.c
+  Shimmerstuff.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff_artefacts\Release\shimmerstuff_SharedCode.lib
+  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
+  juce_audio_plugin_client_AAX.cpp
+  juce_audio_plugin_client_AAX_utils.cpp
+  juce_audio_plugin_client_ARA.cpp
+  juce_audio_plugin_client_LV2.cpp
+  juce_audio_plugin_client_Standalone.cpp
+  juce_audio_plugin_client_Unity.cpp
+  juce_audio_plugin_client_VST2.cpp
+  juce_audio_plugin_client_VST3.cpp
+     Creating library D:/a/shimmerstuff/shimmerstuff/build/Shimmerstuff_artefacts/Release/VST3/shimmerstuff.lib and object D:/a/shimmerstuff/shimmerstuff/build/Shimmerstuff_artefacts/Release/VST3/shimmerstuff.exp
+  Shimmerstuff_VST3.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff_artefacts\Release\VST3\shimmerstuff.vst3\Contents\x86_64-win\shimmerstuff.vst3
+  removing moduleinfo.json
+  creating D:/a/shimmerstuff/shimmerstuff/build/Shimmerstuff_artefacts/Release/VST3/shimmerstuff.vst3/Contents/Resources/moduleinfo.json
+  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
+  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
+  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
+  reverb_test.cpp
+  juce_audio_plugin_client_AAX.cpp
+  juce_audio_plugin_client_AAX_utils.cpp
+  juce_audio_plugin_client_ARA.cpp
+  juce_audio_plugin_client_LV2.cpp
+  juce_audio_plugin_client_Standalone.cpp
+  juce_audio_plugin_client_Unity.cpp
+  juce_audio_plugin_client_VST2.cpp
+  juce_audio_plugin_client_VST3.cpp
+D:\a\shimmerstuff\shimmerstuff\src\Reverb.h(13,11): error C2429: language feature 'nested-namespace-definition' requires compiler flag '/std:c++17' [D:\a\shimmerstuff\shimmerstuff\build\reverb_test.vcxproj]
+  (compiling source file '../tests/reverb_test.cpp')
+  
+  fx_test.cpp
+D:\a\shimmerstuff\shimmerstuff\src\Reverb.h(13,11): error C2429: language feature 'nested-namespace-definition' requires compiler flag '/std:c++17' [D:\a\shimmerstuff\shimmerstuff\build\fx_test.vcxproj]
+  (compiling source file '../tests/fx_test.cpp')
+  
+D:\a\shimmerstuff\shimmerstuff\src\Fx.h(10,11): error C2429: language feature 'nested-namespace-definition' requires compiler flag '/std:c++17' [D:\a\shimmerstuff\shimmerstuff\build\fx_test.vcxproj]
+  (compiling source file '../tests/fx_test.cpp')
+  
+  Shimmerstuff_Standalone.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff_artefacts\Release\Standalone\shimmerstuff.exe
