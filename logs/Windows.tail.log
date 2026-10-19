@@ -32,7 +32,7 @@ Call Stack (most recent call first):
 -- Looking for pthread_create in pthread
 -- Looking for pthread_create in pthread - not found
 -- Found Threads: TRUE
--- Configuring done (128.6s)
+-- Configuring done (139.1s)
 -- Generating done (0.2s)
 CMake Warning (unused-cli):
   Manually-specified variables were not used by the project:
@@ -146,6 +146,7 @@ D:\a\shimmerstuff\shimmerstuff\build\_deps\juce-src\modules\juce_gui_basics\juce
   Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
   Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
   Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
+  fx_test.cpp
   reverb_test.cpp
   juce_audio_plugin_client_AAX.cpp
   juce_audio_plugin_client_AAX_utils.cpp
@@ -155,14 +156,7 @@ D:\a\shimmerstuff\shimmerstuff\build\_deps\juce-src\modules\juce_gui_basics\juce
   juce_audio_plugin_client_Unity.cpp
   juce_audio_plugin_client_VST2.cpp
   juce_audio_plugin_client_VST3.cpp
-D:\a\shimmerstuff\shimmerstuff\src\Reverb.h(13,11): error C2429: language feature 'nested-namespace-definition' requires compiler flag '/std:c++17' [D:\a\shimmerstuff\shimmerstuff\build\reverb_test.vcxproj]
-  (compiling source file '../tests/reverb_test.cpp')
-  
-  fx_test.cpp
-D:\a\shimmerstuff\shimmerstuff\src\Reverb.h(13,11): error C2429: language feature 'nested-namespace-definition' requires compiler flag '/std:c++17' [D:\a\shimmerstuff\shimmerstuff\build\fx_test.vcxproj]
-  (compiling source file '../tests/fx_test.cpp')
-  
-D:\a\shimmerstuff\shimmerstuff\src\Fx.h(10,11): error C2429: language feature 'nested-namespace-definition' requires compiler flag '/std:c++17' [D:\a\shimmerstuff\shimmerstuff\build\fx_test.vcxproj]
-  (compiling source file '../tests/fx_test.cpp')
-  
+  reverb_test.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Release\reverb_test.exe
+  fx_test.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Release\fx_test.exe
   Shimmerstuff_Standalone.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff_artefacts\Release\Standalone\shimmerstuff.exe
+  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
