@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Shimmerstuff VERSION 0.1.0 LANGUAGES C CXX)
+project(Shimmerstuff VERSION 0.2.0 LANGUAGES C CXX)
 
 include(FetchContent)
 FetchContent_Declare(juce GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
@@ -20,7 +20,7 @@ juce_add_plugin(Shimmerstuff
 
 enable_testing()
 find_package(Threads REQUIRED)
-foreach(t fx_test reverb_test)
+foreach(t fx_test reverb_test preset_test)
   add_executable(${t} tests/${t}.cpp)
   target_include_directories(${t} PRIVATE src)
   target_compile_features(${t} PRIVATE cxx_std_17)

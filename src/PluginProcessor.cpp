@@ -5,6 +5,17 @@ using APVTS = juce::AudioProcessorValueTreeState;
 using namespace wm;
 
 const juce::StringArray& ShimmerstuffProcessor::typeNames() { static const juce::StringArray n { "Plate", "Hall", "Shimmer Plate", "Shimmer Hall", "Velvet" }; return n; }
+const char* ShimmerstuffProcessor::layoutGraph(int i)
+{
+    static const char* g[kLayouts] = { "ifx>rev>del>wfx", "ifx>del>rev>wfx", "ifx>rev|del>wfx", "ifx>rev>wfx>del", "ifx>del>wfx>rev", "rev>del>wfx>ifx", "wfx>ifx>rev>del", "rev|del|ifx|wfx" };
+    return g[juce::jlimit(0, kLayouts - 1, i)];
+}
+const juce::StringArray& ShimmerstuffProcessor::layoutNames()
+{
+    static const juce::StringArray n { "FX, Reverb, Delay, Wet FX", "FX, Delay, Reverb, Wet FX", "FX, Reverb and Delay in parallel, Wet FX", "FX, Reverb, Wet FX, Delay", "FX, Delay, Wet FX, Reverb (FX between)",
+        "Reverb, Delay, Wet FX, then FX", "Wet FX first, then FX, Reverb, Delay", "Everything in parallel", "Custom (your own)" };
+    return n;
+}
 const juce::StringArray& ShimmerstuffProcessor::ratioNames() { static const juce::StringArray n { "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bars", "4 bars" }; return n; }
 
 namespace
@@ -29,22 +40,6 @@ const F kFloats[] = {
     { "w_drate", "Duck rate", 0.25f, 16.f, 2.f, 2.f },
 };
 
-struct Preset { const char* name; const char* graph; std::vector<std::pair<const char*, float>> v; };
-const std::vector<Preset>& presets()
-{
-    static const std::vector<Preset> p = {
-        { "Init: Reverb only", "ifx>rev>del>wfx", { { "rev_on", 1 }, { "del_on", 0 }, { "ifx_on", 0 }, { "wfx_on", 0 } } },
-        { "Shimmer Pad", "ifx>rev>del>wfx", { { "rev_on", 1 }, { "del_on", 0 }, { "type", 3 }, { "decay", 0.8f }, { "shimmer", 0.6f }, { "mix", 0.4f }, { "ifx_on", 1 }, { "i_hp", 200 }, { "wfx_on", 1 }, { "w_width", 1.4f } } },
-        { "Hoover Hall (8 s, 204 ms pre)", "ifx>rev>del>wfx", { { "rev_on", 1 }, { "del_on", 0 }, { "type", 1 }, { "decay", 0.93f }, { "predelay", 204 }, { "hp", 290 }, { "lp", 4950 }, { "mix", 0.23f }, { "ifx_on", 0 }, { "wfx_on", 0 } } },
-        { "Delay into Reverb", "ifx>del>rev>wfx", { { "rev_on", 1 }, { "del_on", 1 }, { "dtime", 375 }, { "dshift", 12 }, { "dmix", 0.35f }, { "mix", 0.35f }, { "wfx_on", 1 }, { "w_width", 1.2f } } },
-        { "Parallel Space", "ifx>rev|del>wfx", { { "rev_on", 1 }, { "del_on", 1 }, { "w_width", 1.3f }, { "wfx_on", 1 } } },
-        { "FX between Delay and Reverb", "ifx>del>wfx>rev", { { "rev_on", 1 }, { "del_on", 1 }, { "wfx_on", 1 }, { "w_smix", 0.4f }, { "w_drive", 12 } } },
-        { "Wide Bright Wash", "ifx>rev|del>wfx", { { "rev_on", 1 }, { "del_on", 1 }, { "wfx_on", 1 }, { "w_width", 1.6f }, { "w_qmix", 0.35f }, { "w_depth", 0.5f }, { "w_boost", 2 } } },
-        { "Pumping Tail (1/4 duck)", "ifx>rev>del>wfx", { { "rev_on", 1 }, { "del_on", 0 }, { "wfx_on", 1 }, { "w_duck", 0.9f }, { "w_dmode", 2 }, { "w_dsrc", 0 }, { "w_dratio", 2 }, { "w_dshape", 0 }, { "mix", 0.5f } } },
-        { "Delay only: octave climb", "ifx>rev>del>wfx", { { "rev_on", 0 }, { "del_on", 1 }, { "dtime", 450 }, { "dshift", 12 }, { "dfb", 0.6f }, { "dmix", 0.45f } } },
-    };
-    return p;
-}
 }
 
 APVTS::ParameterLayout ShimmerstuffProcessor::layout()
@@ -63,26 +58,11 @@ APVTS::ParameterLayout ShimmerstuffProcessor::layout()
     p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "w_dshape", 1 }, "Duck shape", shapes, 0));
     p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "w_dratio", 1 }, "Duck ratio", ratioNames(), 2));
     struct B { const char* id; const char* name; bool def; };
+    p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "route", 1 }, "Routing layout", layoutNames(), 0));
     static const B bools[] = { { "rev_on", "Reverb on", true }, { "del_on", "Delay on", false }, { "ifx_on", "Input FX on", true }, { "wfx_on", "Wet FX on", true }, { "byp", "Bypass", false } };
     for (const auto& b : bools)
         p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{ b.id, 1 }, b.name, b.def));
     return { p.begin(), p.end() };
-}
-
-ShimmerstuffProcessor::ShimmerstuffProcessor()
-    : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
-                                      .withInput("Sidechain", juce::AudioChannelSet::stereo(), false)
-                                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts(*this, nullptr, "STATE", layout())
-{
-    setGraph(graphStr);
-}
-
-bool ShimmerstuffProcessor::isBusesLayoutSupported(const BusesLayout& l) const
-{
-    if (l.getMainInputChannelSet() != juce::AudioChannelSet::stereo() || l.getMainOutputChannelSet() != juce::AudioChannelSet::stereo()) return false;
-    const auto sc = l.getChannelSet(true, 1);
-    return sc.isDisabled() || sc == juce::AudioChannelSet::stereo() || sc == juce::AudioChannelSet::mono();
 }
 
 static uint64_t encodeGraph(const fx::Graph& g)
@@ -108,38 +88,108 @@ static fx::Graph decodeGraph(uint64_t c)
     return g;
 }
 
-juce::String ShimmerstuffProcessor::getGraph() const { return graphStr; }
+ShimmerstuffProcessor::ShimmerstuffProcessor()
+    : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
+                                      .withInput("Sidechain", juce::AudioChannelSet::stereo(), false)
+                                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
+      apvts(*this, nullptr, "STATE", layout())
+{
+    for (int i = 0; i < kLayouts; ++i) layoutCode[i] = encodeGraph(fx::parseGraph(layoutGraph(i)));
+    graphCode.store(layoutCode[0]);
+    for (auto& t : tapIn) t.store(0.f);
+    for (auto& t : tapOut) t.store(0.f);
+}
+
+bool ShimmerstuffProcessor::isBusesLayoutSupported(const BusesLayout& l) const
+{
+    if (l.getMainInputChannelSet() != juce::AudioChannelSet::stereo() || l.getMainOutputChannelSet() != juce::AudioChannelSet::stereo()) return false;
+    const auto sc = l.getChannelSet(true, 1);
+    return sc.isDisabled() || sc == juce::AudioChannelSet::stereo() || sc == juce::AudioChannelSet::mono();
+}
+
+juce::String ShimmerstuffProcessor::getGraph() const
+{
+    const int r = (int) get("route");
+    return r < kLayouts ? juce::String(layoutGraph(r)) : graphStr;
+}
 void ShimmerstuffProcessor::setGraph(const juce::String& s)
 {
-    graph = fx::parseGraph(s.toStdString());
-    graphStr = juce::String(fx::graphString(graph));
+    const auto parsed = fx::parseGraph(s.toStdString());
+    const juce::String norm(fx::graphString(parsed));
+    for (int i = 0; i < kLayouts; ++i)
+        if (norm == layoutGraph(i)) { setParam("route", (float) i); return; }
+    graphStr = norm; graph = parsed;
     graphCode.store(encodeGraph(graph));
     apvts.state.setProperty("graph", graphStr, nullptr);
+    setParam("route", (float) kLayouts);
 }
 void ShimmerstuffProcessor::setParam(const juce::String& id, float v)
 {
     if (auto* q = apvts.getParameter(id)) q->setValueNotifyingHost(q->convertTo0to1(v));
 }
 
-int ShimmerstuffProcessor::getNumPrograms() { return (int) presets().size(); }
-const juce::String ShimmerstuffProcessor::getProgramName(int i) { return juce::isPositiveAndBelow(i, getNumPrograms()) ? presets()[(size_t) i].name : ""; }
-void ShimmerstuffProcessor::setCurrentProgram(int i)
+void ShimmerstuffProcessor::resetKeys(const std::vector<const char*>& keys, bool onOff)
 {
-    if (!juce::isPositiveAndBelow(i, getNumPrograms())) return;
-    program = i;
-    // a main preset sets every parameter: start from the defaults, then apply what differs
-    for (const auto& f : kFloats) setParam(f.id, f.def);
-    setParam("type", 3); setParam("w_dmode", 0); setParam("w_dsrc", 1); setParam("w_dshape", 0); setParam("w_dratio", 2);
-    setParam("rev_on", 1); setParam("del_on", 0); setParam("ifx_on", 1); setParam("wfx_on", 1); setParam("byp", 0);
-    const auto& pr = presets()[(size_t) i];
-    for (const auto& kv : pr.v) setParam(kv.first, kv.second);
-    setGraph(pr.graph);
+    // the Reverb and Delay tabs only edit their unit: a tab preset leaves the on/off state alone unless it sets it, the routing stays as chosen
+    for (auto* k : keys)
+        if (onOff || (juce::String(k) != "rev_on" && juce::String(k) != "del_on"))
+            if (auto* q = apvts.getParameter(k)) q->setValueNotifyingHost(q->getDefaultValue());
 }
-
-juce::XmlElement* ShimmerstuffProcessor::makePresetXml() const
+void ShimmerstuffProcessor::applyKeys(const std::vector<const char*>& keys, const ssp::Pre* p, bool onOff)
 {
-    auto xml = const_cast<juce::AudioProcessorValueTreeState&>(apvts).copyState().createXml().release();
-    xml->setAttribute("graph", graphStr);
+    resetKeys(keys, onOff);
+    if (p == nullptr) return;
+    for (const auto& kv : p->v) setParam(kv.first, kv.second);
+    if (p->graph != nullptr) setGraph(p->graph);
+}
+int ShimmerstuffProcessor::numTabPresets(int tab) const { return (int) (tab == 0 ? ssp::reverbPresets() : tab == 1 ? ssp::delayPresets() : ssp::fxPresets()).size(); }
+juce::String ShimmerstuffProcessor::tabPresetName(int tab, int i) const
+{
+    const auto& l = tab == 0 ? ssp::reverbPresets() : tab == 1 ? ssp::delayPresets() : ssp::fxPresets();
+    return juce::isPositiveAndBelow(i, (int) l.size()) ? l[(size_t) i].name : "";
+}
+void ShimmerstuffProcessor::applyTabPreset(int tab, int i)
+{
+    const auto& l = tab == 0 ? ssp::reverbPresets() : tab == 1 ? ssp::delayPresets() : ssp::fxPresets();
+    if (!juce::isPositiveAndBelow(i, (int) l.size()) || tab < 0 || tab > 2) return;
+    lastTabPreset[tab] = i;
+    applyKeys(tab == 0 ? ssp::reverbKeys() : tab == 1 ? ssp::delayKeys() : ssp::fxKeys(), &l[(size_t) i], tab == 2);
+}
+int ShimmerstuffProcessor::numMainPresets() const { return (int) ssp::mainPresets().size(); }
+juce::String ShimmerstuffProcessor::mainPresetName(int i) const { return juce::isPositiveAndBelow(i, numMainPresets()) ? ssp::mainPresets()[(size_t) i].name : ""; }
+void ShimmerstuffProcessor::applyMainPreset(int i)
+{
+    if (!juce::isPositiveAndBelow(i, numMainPresets())) return;
+    program = i;
+    const auto& m = ssp::mainPresets()[(size_t) i];
+    auto find = [](const std::vector<ssp::Pre>& l, const char* n) -> const ssp::Pre* { for (const auto& p : l) if (juce::String(p.name) == n) return &p; return nullptr; };
+    applyKeys(ssp::reverbKeys(), find(ssp::reverbPresets(), m.rev), true);
+    applyKeys(ssp::delayKeys(), find(ssp::delayPresets(), m.del), true);
+    applyKeys(ssp::fxKeys(), find(ssp::fxPresets(), m.fx), true);
+    for (const auto& kv : m.extra) setParam(kv.first, kv.second);
+    setParam("byp", 0.f);
+    for (int t = 0; t < 3; ++t) lastTabPreset[t] = -1;
+}
+int ShimmerstuffProcessor::getNumPrograms() { return numMainPresets(); }
+const juce::String ShimmerstuffProcessor::getProgramName(int i) { return mainPresetName(i); }
+void ShimmerstuffProcessor::setCurrentProgram(int i) { applyMainPreset(i); }
+
+juce::XmlElement* ShimmerstuffProcessor::makePresetXml(int tab) const
+{
+    // a small validated format: PARAM elements with id and value, plus the custom graph
+    auto* xml = new juce::XmlElement("STATE");
+    const std::vector<const char*>& keys = tab == 0 ? ssp::reverbKeys() : tab == 1 ? ssp::delayKeys() : ssp::fxKeys();
+    if (tab < 0)
+    {
+        for (auto* par : const_cast<ShimmerstuffProcessor*>(this)->getParameters())
+            if (auto* r = dynamic_cast<juce::RangedAudioParameter*>(par); r != nullptr && r->paramID != "byp")
+            { auto* e = xml->createNewChildElement("PARAM"); e->setAttribute("id", r->paramID); e->setAttribute("value", (double) r->convertFrom0to1(r->getValue())); }
+    }
+    else
+        for (auto* k : keys)
+            if (auto* r = apvts.getParameter(k)) { auto* e = xml->createNewChildElement("PARAM"); e->setAttribute("id", k); e->setAttribute("value", (double) r->convertFrom0to1(r->getValue())); }
+    if (tab < 0 || tab == 2) xml->setAttribute("graph", graphStr);     // only the FX and routing tab and main presets carry the routing
+    xml->setAttribute("tab", tab);
     return xml;
 }
 void ShimmerstuffProcessor::applyUserPresetXml(const juce::XmlElement& xml)
@@ -148,8 +198,10 @@ void ShimmerstuffProcessor::applyUserPresetXml(const juce::XmlElement& xml)
     for (auto* e : xml.getChildIterator())
         if (e->hasTagName("PARAM"))
             if (auto* q = apvts.getParameter(e->getStringAttribute("id")))
-                q->setValueNotifyingHost(q->convertTo0to1((float) e->getDoubleAttribute("value", (double) q->convertFrom0to1(q->getValue()))));
-    setGraph(xml.getStringAttribute("graph", graphStr));
+                if (q->paramID != "byp")
+                    q->setValueNotifyingHost(q->convertTo0to1((float) e->getDoubleAttribute("value", (double) q->convertFrom0to1(q->getValue()))));
+    const auto g = xml.getStringAttribute("graph", {});
+    if (g.isNotEmpty()) { const auto parsed = fx::parseGraph(g.toStdString()); graphStr = juce::String(fx::graphString(parsed)); graph = parsed; graphCode.store(encodeGraph(graph)); apvts.state.setProperty("graph", graphStr, nullptr); }
 }
 
 void ShimmerstuffProcessor::prepareToPlay(double sr, int)
@@ -192,8 +244,9 @@ void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::Mi
     if (!smInit) { for (int i = 0; i < 9; ++i) sm[i] = targets[i]; smDt = get("dtime"); smInit = true; }
     const float k = 1.f - std::exp(-1.f / (0.015f * (float) fs)), kT = 1.f - std::exp(-1.f / (0.08f * (float) fs));
     const float dtime = get("dtime");
-    const fx::Graph g = decodeGraph(graphCode.load());
-    float pkIn = 0, pkOut = 0, minDg = 1;
+    const int rt = juce::jlimit(0, kLayouts, (int) get("route"));
+    const fx::Graph g = decodeGraph(rt < kLayouts ? layoutCode[rt] : graphCode.load());
+    float pkIn = 0, pkOut = 0, minDg = 1; double sq = 0; int tp = tapPos.load(std::memory_order_relaxed);
     for (int i = 0; i < n; ++i)
     {
         for (int j = 0; j < 9; ++j) sm[j] += k * (targets[j] - sm[j]);
@@ -203,9 +256,13 @@ void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::Mi
         float ol, orr; eng.tick(g, l, r, tl, tr, ol, orr);
         if (byp) { ol = l; orr = r; }
         L[i] = ol; R[i] = orr;
+        tapIn[(size_t) tp].store(0.5f * (l + r), std::memory_order_relaxed); tapOut[(size_t) tp].store(0.5f * (ol + orr), std::memory_order_relaxed); tp = (tp + 1) & (kTap - 1);
+        sq += 0.5 * ((double) ol * ol + (double) orr * orr);
         pkIn = std::max(pkIn, std::max(std::fabs(l), std::fabs(r))); pkOut = std::max(pkOut, std::max(std::fabs(ol), std::fabs(orr)));
         minDg = std::min(minDg, eng.wfx.duck().dg);
     }
+    tapPos.store(tp, std::memory_order_release);
+    rms.store((float) std::sqrt(sq / (double) std::max(1, n)));
     inPk = pkIn; outPk = pkOut; duckGain = minDg;
 }
 
@@ -221,7 +278,9 @@ void ShimmerstuffProcessor::setStateInformation(const void* d, int s)
     if (auto xml = getXmlFromBinary(d, s))
     {
         apvts.replaceState(juce::ValueTree::fromXml(*xml));
-        setGraph(xml->getStringAttribute("graph", graphStr));
+        const auto g = xml->getStringAttribute("graph", graphStr);
+        const auto parsed = fx::parseGraph(g.toStdString());
+        graphStr = juce::String(fx::graphString(parsed)); graph = parsed; graphCode.store(encodeGraph(graph));
     }
 }
 

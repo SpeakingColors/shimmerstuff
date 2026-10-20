@@ -2,267 +2,232 @@
  {
   "n": 1,
   "name": "Previous preset",
-  "tip": "Previous preset.",
-  "x": 496.421875,
-  "y": 38.5
+  "tip": "Previous preset for this tab.",
+  "x": 475,
+  "y": 19
  },
  {
   "n": 2,
-  "name": "Init",
-  "tip": "Open the preset list: factory presets and your own.",
-  "x": 697.046875,
-  "y": 38
+  "name": "Preset list",
+  "tip": "Presets for this tab: factory ones and your own. Moving a control shows Custom.",
+  "x": 666,
+  "y": 19
  },
  {
   "n": 3,
   "name": "Next preset",
-  "tip": "Next preset.",
-  "x": 897.671875,
-  "y": 38.5
+  "tip": "Next preset for this tab.",
+  "x": 857,
+  "y": 19
  },
  {
   "n": 4,
   "name": "Save",
-  "tip": "Save the current settings as your own preset (stays on this device).",
-  "x": 949.6640625,
-  "y": 38.5
+  "tip": "Save this tab's settings as your own preset (kept on this computer).",
+  "x": 911,
+  "y": 19
  },
  {
   "n": 5,
-  "name": "\u22ef",
-  "tip": "Delete, export or import your presets.",
-  "x": 1005.9921875,
-  "y": 38.5
+  "name": "More",
+  "tip": "Delete your presets or open the presets folder.",
+  "x": 967,
+  "y": 19
  },
  {
   "n": 6,
   "name": "Guide",
   "tip": "Quick guide: what each view and control does.",
-  "x": 1076.203125,
-  "y": 38.5
+  "x": 1041,
+  "y": 19
  },
  {
   "n": 7,
   "name": "Settings",
-  "tip": "Info bubbles and eco mode.",
-  "x": 1166.0546875,
-  "y": 38.5
+  "tip": "Info bubbles and the presets folder.",
+  "x": 1125,
+  "y": 19
  },
  {
   "n": 8,
   "name": "About & Support",
   "tip": "About Studio 87, privacy, and ways to support the project.",
-  "x": 1303.359375,
-  "y": 38.5
+  "x": 1246,
+  "y": 19
  },
  {
   "n": 9,
   "name": "Shimmer Reverb",
-  "tip": "The reverb plugin: plate, hall, shimmer plate, shimmer hall and velvet.",
-  "x": 250.5234375,
+  "tip": "The reverb view: plate, hall, shimmer plate, shimmer hall and velvet.",
+  "x": 180,
   "y": 97
  },
  {
   "n": 10,
   "name": "Shimmer Delay",
-  "tip": "The delay plugin: echoes that climb (or fall) in pitch with every repeat.",
-  "x": 529.5703125,
+  "tip": "The delay view: echoes that climb (or fall) in pitch with every repeat. The routing stays as you set it on every tab.",
+  "x": 457,
   "y": 97
  },
  {
   "n": 11,
   "name": "FX and Routing",
-  "tip": "Route the reverb and delay (one, the other, in series or in parallel) and add saturation, squash, duck and width.",
-  "x": 808.6171875,
+  "tip": "Route the reverb and delay in series or side by side, and add saturation, squash, duck and width.",
+  "x": 734,
   "y": 97
  },
  {
   "n": 12,
   "name": "Main preset",
-  "tip": "One preset for the whole plugin: it sets the reverb, the delay and the FX and routing tabs together. The preset list at the top still has the presets of the tab you are on.",
-  "x": 1183.078125,
-  "y": 109
+  "tip": "Main presets set the whole plugin: reverb, delay, FX and routing.",
+  "x": 1087,
+  "y": 99
  },
  {
   "n": 13,
   "name": "Save main preset",
-  "tip": "Saves everything on all three tabs as one preset (stays on this device).",
-  "x": 1345.0390625,
-  "y": 103.5
+  "tip": "Save the whole plugin as your own main preset.",
+  "x": 1262,
+  "y": 99
  },
  {
   "n": 14,
-  "name": "Test signal",
-  "tip": "Pick what the preview rig plays into the plugin. 'Single click' is the cleanest way to hear a reverb tail or the echo train. 'Your file' uses the file you loaded.",
-  "x": 346.421875,
-  "y": 171
+  "name": "Decay",
+  "tip": "The measured decay of the real reverb. Yellow dot: decay (sideways) and size (up or down). Cyan: pre-delay. Blue: damping. Orange: shimmer. Pink: mix.",
+  "x": 63,
+  "y": 165
  },
  {
   "n": 15,
-  "name": "Play",
-  "tip": "Start or stop the test signal. Shortcut: Space.",
-  "x": 501.046875,
-  "y": 178
+  "name": "Tone",
+  "tip": "Live spectrum of the input and output with draggable filter lines.",
+  "x": 142,
+  "y": 165
  },
  {
   "n": 16,
-  "name": "Load file",
-  "tip": "Load your own audio file (wav, mp3, flac, ogg). It stays in this browser tab and is never uploaded.",
-  "x": 599.65625,
-  "y": 178.5
+  "name": "Decay view",
+  "tip": "Drag the coloured dots; double-click a dot to reset it.",
+  "x": 630,
+  "y": 330
  },
  {
   "n": 17,
-  "name": "Clear tail",
-  "tip": "Empties the reverb or delay tail at once, like stopping and restarting the transport.",
-  "x": 714,
-  "y": 178.5
+  "name": "Level",
+  "tip": "Input and output peaks, RMS, RT60, and the clip light.",
+  "x": 1221,
+  "y": 500
  },
  {
   "n": 18,
-  "name": "Input trim",
-  "tip": "Level into the plugin, like the gain of the track in your DAW. Double-click resets.",
-  "x": 845.3359375,
-  "y": 179
+  "name": "Peak reset",
+  "tip": "Clears the held peaks and the clip light.",
+  "x": 1150,
+  "y": 836
  },
  {
   "n": 19,
-  "name": "Compare: bypass",
-  "tip": "Hear the unprocessed signal at the same moment. This is the preview rig, not a plugin control.",
-  "x": 996.078125,
-  "y": 178.5
+  "name": "ON",
+  "tip": "Switches the reverb on or off. Same switch as the power icon in the routing diagram.",
+  "x": 1071,
+  "y": 658
  },
  {
   "n": 20,
-  "name": "Decay",
-  "tip": "Decay: how the tail fades, measured from the real DSP with an impulse. Yellow dot: drag sideways for Decay and up or down for Size. Cyan: pre-delay. Blue: damping. Orange: shimmer amount. Pink slider: mix. The purple curve follows while you drag. Shortcut: 1.",
-  "x": 150.7578125,
-  "y": 260
+  "name": "Type",
+  "tip": "Plate, hall, shimmer plate, shimmer hall or velvet.",
+  "x": 90,
+  "y": 692
  },
  {
   "n": 21,
-  "name": "Tone",
-  "tip": "Tone: live spectrum before (grey) and after (colour). Drag the lines to set the damping and the wet high-pass and low-pass. Shortcut: 2.",
-  "x": 225.5390625,
-  "y": 260
+  "name": "Decay knob",
+  "tip": "Tail length.",
+  "x": 254,
+  "y": 661
  },
  {
   "n": 22,
-  "name": "Type",
-  "tip": "Plate: bright and dense, short to medium. Hall: bigger and smoother. Shimmer Plate and Shimmer Hall add a pitch shifted copy into the tail. Velvet: two halls blended, soft and dark to bright with Colour.",
-  "x": 196.5,
-  "y": 786
+  "name": "Size",
+  "tip": "Room size.",
+  "x": 354,
+  "y": 661
  },
  {
   "n": 23,
-  "name": "Decay",
-  "tip": "Length of the tail. The Decay display shows the real result in seconds, measured from the DSP. Double-click resets.",
-  "x": 314,
-  "y": 772
+  "name": "Pre-delay",
+  "tip": "Gap before the reverb starts.",
+  "x": 454,
+  "y": 661
  },
  {
   "n": 24,
-  "name": "Size",
-  "tip": "Scales the delay lines: a small room or a big one. Bigger sounds slower and less dense. Double-click resets.",
-  "x": 408,
-  "y": 772
+  "name": "Modulation",
+  "tip": "Slow movement inside the tail.",
+  "x": 554,
+  "y": 661
  },
  {
   "n": 25,
-  "name": "Pre-delay",
-  "tip": "Gap before the tail starts. Keeps the dry sound clear. Around 200 ms suits a lead. Double-click resets.",
-  "x": 502,
-  "y": 772
+  "name": "Velvet colour",
+  "tip": "Velvet type only: dark to bright.",
+  "x": 654,
+  "y": 661
  },
  {
   "n": 26,
-  "name": "Modulation",
-  "tip": "Slow movement inside the tail that stops it sounding metallic. Double-click resets.",
-  "x": 596,
-  "y": 772
+  "name": "Shimmer pitch",
+  "tip": "Pitch of the shimmer voice fed back into the tail.",
+  "x": 110,
+  "y": 781
  },
  {
   "n": 27,
-  "name": "Velvet colour",
-  "tip": "Velvet type only: negative is darker, positive is brighter. Double-click resets.",
-  "x": 690,
-  "y": 772
+  "name": "Shimmer amount",
+  "tip": "How much shifted tail is fed back.",
+  "x": 210,
+  "y": 781
  },
  {
   "n": 28,
-  "name": "Pitch",
-  "tip": "Pitch of the shimmer copy that feeds back into the tail. +12 is an octave up. Double-click resets.",
-  "x": 173,
-  "y": 897
+  "name": "Pitch 2",
+  "tip": "Pitch of the second shimmer voice.",
+  "x": 310,
+  "y": 781
  },
  {
   "n": 29,
-  "name": "Amount",
-  "tip": "How much of the tail is shifted and fed back. The plugin limits the total so it cannot run away. Double-click resets.",
-  "x": 267,
-  "y": 897
+  "name": "Amount 2",
+  "tip": "Amount of the second shimmer voice.",
+  "x": 410,
+  "y": 781
  },
  {
   "n": 30,
-  "name": "Pitch 2",
-  "tip": "Second shimmer pitch. +7 is a fifth up. Double-click resets.",
-  "x": 361,
-  "y": 897
+  "name": "Damping",
+  "tip": "Darkens the tail.",
+  "x": 650,
+  "y": 781
  },
  {
   "n": 31,
-  "name": "Amount 2",
-  "tip": "Amount of the second shimmer voice. 0 means it is off. Double-click resets.",
-  "x": 455,
-  "y": 897
+  "name": "Wet HP",
+  "tip": "High-pass on the reverb tail only.",
+  "x": 750,
+  "y": 781
  },
  {
   "n": 32,
-  "name": "Damping",
-  "tip": "How fast the highs die away inside the tail. Lower is darker and warmer. Also draggable on the Tone view. Double-click resets.",
-  "x": 701,
-  "y": 897
+  "name": "Wet LP",
+  "tip": "Low-pass on the reverb tail only.",
+  "x": 850,
+  "y": 781
  },
  {
   "n": 33,
-  "name": "Wet HP",
-  "tip": "Removes lows from the reverb only. Around 200 to 300 Hz keeps a lead tail clean. Also draggable on the Tone view. Double-click resets.",
-  "x": 795,
-  "y": 897
- },
- {
-  "n": 34,
-  "name": "Wet LP",
-  "tip": "Removes highs from the reverb only. Also draggable on the Tone view. Double-click resets.",
-  "x": 889,
-  "y": 897
- },
- {
-  "n": 35,
   "name": "Mix",
-  "tip": "Dry/wet. 0 is the dry signal only, 100 % is the reverb only. Double-click resets.",
-  "x": 983,
-  "y": 897
- },
- {
-  "n": 36,
-  "name": "Peak reset",
-  "tip": "Clears the held peaks and the clip light. Shortcut: R.",
-  "x": 1286,
-  "y": 947
- },
- {
-  "n": 37,
-  "name": "Window 100 %",
-  "tip": "Window size. Drag any edge or corner of the plugin to resize it; the shape stays the same. Double-click here for 100 %.",
-  "x": 1329.46875,
-  "y": 1006
- },
- {
-  "n": 38,
-  "name": "Resize",
-  "tip": "Drag to resize the window. Every edge and corner works, and the shape stays the same.",
-  "x": 750,
-  "y": 17
+  "tip": "Reverb dry/wet.",
+  "x": 950,
+  "y": 781
  }
 ]

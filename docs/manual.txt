@@ -12,6 +12,10 @@ It is free and open source, made by Studio 87. It collects nothing and works ful
 - FX and Routing tab: drag the boxes to run reverb and delay in series or side by side.
 - Hover any control for one second to read what it does.
 
+# Tabs are views
+
+Shimmer Reverb, Shimmer Delay and FX and Routing are three views of the same plugin, made to fine tune each part. The routing and the on or off switches you chose stay active whichever tab is open. The ON button on the Reverb and Delay tabs is the same switch as the power icon on the box in the routing view (and the same host parameter).
+
 # Reverb
 
 Five types: plate, hall, shimmer plate, shimmer hall and velvet. Decay is the tail length, Damping darkens it, Pre-delay delays its start, Size is the room size, Modulation adds movement. Shimmer pitch and Shimmer set how much pitch shifted tail is fed back (a second voice is available). Wet HP and Wet LP shape the tail only. The decay view shows the energy decay of the real reverb, measured live.
@@ -26,7 +30,7 @@ Input FX (high-pass, low-pass and antialiased saturation) sit before the effects
 
 # Presets
 
-The preset list holds nine factory main presets (the whole plugin) and your own. Save writes your preset on this computer. The graph (routing) is saved with the preset and with your project, but it is not an automatable parameter.
+Each tab has its own preset list (factory and your own) for just that part, and the Main preset list at the top right sets the whole plugin: reverb, delay, FX and routing, including which units are on. Save writes your preset on this computer. The graph (routing) is saved with the preset and with your project, but it is not an automatable parameter.
 
 # Recommendations
 
@@ -36,7 +40,7 @@ The preset list holds nine factory main presets (the whole plugin) and your own.
 
 # Interface tour
 
-The numbered picture below comes from the design mockup of the interface, so spacing can differ slightly from the plugin window. The list names every control.
+The numbered picture below is the plugin window (Shimmer Reverb view). The list names every control.
 
 # Support
 

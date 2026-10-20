@@ -41,7 +41,7 @@ if os.path.exists(os.path.join(tour, "window.png")):
     from reportlab.platypus import Image, PageBreak, Table, TableStyle
     from reportlab.lib.utils import ImageReader
     story.append(PageBreak()); story.append(Paragraph("Interface tour", h2))
-    story.append(Paragraph("Numbered pink badges mark every control. The list below gives the name and the full info-bubble text of each. The picture is taken from the design mockup that the editor follows.", body))
+    story.append(Paragraph("Numbered pink badges mark every control. The list below gives the name and the full info-bubble text of each. The picture is the plugin window itself.", body))
     iw, ih = ImageReader(os.path.join(tour, "window.png")).getSize(); w = 170 * mm
     story.append(Image(os.path.join(tour, "window.png"), width=w, height=w * ih / iw))
     items = json.load(open(os.path.join(tour, "tour.json"), encoding="utf-8"))

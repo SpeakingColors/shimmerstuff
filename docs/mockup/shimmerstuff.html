@@ -164,6 +164,7 @@ aside.meters { padding:8px; gap:6px; }
 .rig .kw .kl { grid-area:l; text-align:left; } .rig .kw .kv { grid-area:v; }
 .vtrow { display:flex; gap:10px; align-items:center; }
 .hint3 { color:var(--ink-dim); font-size:12.5px; letter-spacing:.04em; margin-left:auto; align-self:center; max-width:340px; }
+.pwr { min-width:66px; align-self:flex-end; }
 </style>
 <div id="desk"><div id="frame"><div id="win">
 <div class="unit" id="unit">
@@ -747,8 +748,8 @@ def("type", 3); def("decay", 0.6); def("damp", 6000); def("predelay", 20); def("
 def("shift", 12); def("shimmer", 0.5); def("shift2", 7); def("shimmer2", 0); def("hp", 20); def("lp", 20000); def("mix", 0.35);
 def("graph", "ifx>rev>del>wfx"); def("rev_on", true); def("del_on", false); def("ifx_on", true); def("wfx_on", true); def("i_hp", 20); def("i_lp", 20000); def("i_drive", 6); def("i_mix", 0); def("w_drive", 8); def("w_smix", 0); def("w_depth", 0.6); def("w_qmix", 0); def("w_duck", 0); def("w_drel", 250); def("w_dmode", "follow"); def("w_dsrc", "input"); def("w_dshape", 0); def("w_drate", 2); def("w_dratio", 1); def("w_bpm", 140); def("w_width", 1); def("w_boost", 0);
 def("dtime", 450); def("dfb", 0.55); def("dshift", 12); def("dshim", 1); def("ddamp", 5000); def("dmix", 0.4);
-var RK = ["type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "mix"];
-var DK = ["dtime", "dfb", "dshift", "dshim", "ddamp", "dmix"];
+var RK = ["rev_on", "type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "mix"];
+var DK = ["del_on", "dtime", "dfb", "dshift", "dshim", "ddamp", "dmix"];
 var FK = ["graph", "rev_on", "del_on", "ifx_on", "wfx_on", "i_hp", "i_lp", "i_drive", "i_mix", "w_drive", "w_smix", "w_depth", "w_qmix", "w_duck", "w_drel", "w_dmode", "w_dsrc", "w_dshape", "w_drate", "w_dratio", "w_bpm", "w_width", "w_boost"];
 var MK = RK.concat(DK, FK);
 var MEAS_R = { type: 1, decay: 1, damp: 1, predelay: 1, size: 1, mod: 1, color: 1, shift: 1, shimmer: 1, shift2: 1, shimmer2: 1, hp: 1, lp: 1 };
@@ -797,6 +798,7 @@ function mkShapeDD(host) {
   function grp(host, n, title, sub, cls) { var d = document.createElement("div"); d.className = "g3" + (cls ? " " + cls : ""); d.innerHTML = '<div class="gh"><i>' + n + '</i>' + title + ' <small>' + sub + '</small></div>'; host.appendChild(d); return d; }
   var R = $("#fxR"), D = $("#fxD");
   var g1 = grp(R, 1, "Space", "type and size of the room", "wide"), g2 = grp(R, 2, "Shimmer", "for the two shimmer types"), g3 = grp(R, 3, "Tone and mix", "what reaches the output");
+  mkTog(g1, "rev_on", "\u23FB On", "Switches the reverb on or off. Same switch as the power icon on the Reverb box in FX and Routing: the routing you chose stays active on every tab, this tab is only for fine tuning.", true, "pwr");
   mkSel(g1, "type", "Type", [[0, "Plate"], [1, "Hall"], [2, "Shimmer Plate"], [3, "Shimmer Hall"], [4, "Velvet"]], "Plate: bright and dense, short to medium. Hall: bigger and smoother. Shimmer Plate and Shimmer Hall add a pitch shifted copy into the tail. Velvet: two halls blended, soft and dark to bright with Colour.");
   mkKnob(g1, { id: "decay", label: "Decay", min: 0, max: 1, step: 0.01, def: 0.6, color: COL.rev, fmt: fmtPct, tip: "Length of the tail. The Decay display shows the real result in seconds, measured from the DSP." });
   mkKnob(g1, { id: "size", label: "Size", min: 0.5, max: 1.6, step: 0.01, def: 1, color: COL.rev, fmt: function (v) { return "x" + v.toFixed(2); }, tip: "Scales the delay lines: a small room or a big one. Bigger sounds slower and less dense." });
@@ -851,6 +853,7 @@ function mkShapeDD(host) {
   function duckUI() { var m = S.w_dmode; KW.w_drel.hidden = m !== "follow"; KW.w_drate.hidden = m !== "free"; KW.w_bpm.hidden = !(m === "sync" || S.w_dsrc === "kick" || S.w_dsrc === "off"); DD.ratio.hidden = m !== "sync"; DD.shape.hidden = m === "follow"; }
   ["w_dmode", "w_dsrc"].forEach(function (k) { addUI(k, duckUI); }); duckUI();
   var d1 = grp(D, 1, "Echo", "timing and repeats"), d2 = grp(D, 2, "Shimmer", "pitch of the repeats"), d3 = grp(D, 3, "Tone and mix", "what reaches the output");
+  mkTog(d1, "del_on", "\u23FB On", "Switches the delay on or off. Same switch as the power icon on the Delay box in FX and Routing: the routing you chose stays active on every tab, this tab is only for fine tuning.", false, "pwr");
   mkKnob(d1, { id: "dtime", label: "Time", min: 20, max: 2000, log: true, def: 450, color: COL.del, fmt: fmtMs, tip: "Time between repeats. Drag the first bar on the Echoes view to set it. At 150 BPM an eighth note is 200 ms and a dotted eighth is 300 ms." });
   mkKnob(d1, { id: "dfb", label: "Feedback", min: 0, max: 0.95, step: 0.01, def: 0.55, color: COL.del, fmt: fmtPct, tip: "How much of each repeat goes back in. Higher gives more repeats. Drag the second bar on the Echoes view." });
   mkKnob(d2, { id: "dshift", label: "Shift", min: -12, max: 12, step: 1, def: 12, mid: 0, color: COL.acc, fmt: fmtSt, tip: "Pitch change added at every repeat. +12 climbs an octave each time, -12 falls an octave each time." });
@@ -1017,7 +1020,7 @@ function onParam(id, v) {
   if (id === "src" && E.playing && v !== "file") startSrc();
   if (id === "view") setView(v);
   if (id === "mode") {
-    setModeUI(); if (ctx) E.clear = true;
+    setModeUI();
     tabPresets(v); schedMeasure();
   }
   if (S.mode === "reverb" ? MEAS_R[id] : S.mode === "delay" ? MEAS_D[id] : false) schedMeasure();
