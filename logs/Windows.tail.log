@@ -32,7 +32,7 @@ Call Stack (most recent call first):
 -- Looking for pthread_create in pthread
 -- Looking for pthread_create in pthread - not found
 -- Found Threads: TRUE
--- Configuring done (86.6s)
+-- Configuring done (96.9s)
 -- Generating done (0.1s)
 CMake Warning (unused-cli):
   Manually-specified variables were not used by the project:
@@ -41,13 +41,13 @@ CMake Warning (unused-cli):
 
 
 -- Build files have been written to: D:/a/shimmerstuff/shimmerstuff/build
-MSBuild version 18.10.1-1.26427.6+3cd27c13e for .NET Framework
+MSBuild version 18.11.0-1.26475.11+3cde5c8ec for .NET Framework
 
   Checking File Globs
   1>Checking Build System
   Generating Shimmerstuff_artefacts/JuceLibraryCode/Shimmerstuff_resources.rc
-  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
   Building VST3 manifest helper for Shimmerstuff
+  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
   Shimmerstuff_rc_lib.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff_rc_lib.dir\Release\Shimmerstuff_rc_lib.lib
   -- The CXX compiler identification is MSVC 19.51.36260.0
   -- Detecting CXX compiler ABI info
@@ -55,10 +55,10 @@ MSBuild version 18.10.1-1.26427.6+3cd27c13e for .NET Framework
   -- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/cl.exe - skipped
   -- Detecting CXX compile features
   -- Detecting CXX compile features - done
-  -- Configuring done (1.2s)
+  -- Configuring done (1.4s)
   -- Generating done (0.0s)
   -- Build files have been written to: D:/a/shimmerstuff/shimmerstuff/build/vst3_helpers/Shimmerstuff
-  MSBuild version 18.10.1-1.26427.6+3cd27c13e for .NET Framework
+  MSBuild version 18.11.0-1.26475.11+3cde5c8ec for .NET Framework
   
     1>Checking Build System
     Building Custom Rule D:/a/shimmerstuff/shimmerstuff/build/_deps/juce-src/extras/Build/CMake/juce_vst3_helper/CMakeLists.txt
@@ -170,14 +170,7 @@ D:\a\shimmerstuff\shimmerstuff\build\_deps\juce-src\modules\juce_gui_basics\juce
   Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
   Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
   fx_test.cpp
-  juce_audio_plugin_client_AAX.cpp
-  juce_audio_plugin_client_AAX_utils.cpp
-  juce_audio_plugin_client_ARA.cpp
-  juce_audio_plugin_client_LV2.cpp
-  juce_audio_plugin_client_Standalone.cpp
-  juce_audio_plugin_client_Unity.cpp
-  juce_audio_plugin_client_VST2.cpp
-  juce_audio_plugin_client_VST3.cpp
+  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
 C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244: 'initializing': conversion from '_Ty' to '_Ty2', possible loss of data [D:\a\shimmerstuff\shimmerstuff\build\preset_test.vcxproj]
 C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244:         with [D:\a\shimmerstuff\shimmerstuff\build\preset_test.vcxproj]
 C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244:         [ [D:\a\shimmerstuff\shimmerstuff\build\preset_test.vcxproj]
@@ -200,8 +193,15 @@ C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231
               D:\a\shimmerstuff\shimmerstuff\src\Presets.h(19,39):
               see the first reference to 'std::pair<const char *,float>::pair' in 'ssp::reverbPresets'
   
-  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
   reverb_test.cpp
+  juce_audio_plugin_client_AAX.cpp
+  juce_audio_plugin_client_AAX_utils.cpp
+  juce_audio_plugin_client_ARA.cpp
+  juce_audio_plugin_client_LV2.cpp
+  juce_audio_plugin_client_Standalone.cpp
+  juce_audio_plugin_client_Unity.cpp
+  juce_audio_plugin_client_VST2.cpp
+  juce_audio_plugin_client_VST3.cpp
   preset_test.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Release\preset_test.exe
   fx_test.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Release\fx_test.exe
   reverb_test.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Release\reverb_test.exe
