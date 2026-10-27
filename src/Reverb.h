@@ -250,6 +250,10 @@ public:
             float g = 0.4f * std::min(1.0f, std::max(0.0f, s.shimmerAmount));
             float g2 = 0.4f * std::min(1.0f, std::max(0.0f, s.shimmer2Amount));
             if (g + g2 > 0.4f) { float k = 0.4f / (g + g2); g *= k; g2 *= k; }   // both voices together never exceed the single-voice loop gain
+            // The plate alone is almost at unity loop gain at the longest decays, so shifted feedback pushes the loop past 1
+            // (measured with tests/measure.sh section 3, 40 s of loud noise at decay 1.0 and full shimmer: peak 8.1 before this line, 3.6 after; the hall network stays stable).
+            // Fade the feedback to a quarter between decay 0.9 and 1.0, plate only, so no factory preset changes.
+            if (s.type == ReverbType::ShimmerPlate) { const float dk = std::min(1.0f, std::max(0.25f, (1.0f - s.p.decay) / 0.1f)); g *= dk; g2 *= dk; }
             fl += g * ps_[0].tick(last_[0], ratio);
             fr += g * ps_[1].tick(last_[1], ratio);
             if (s.shimmer2Amount > 0.0f) {

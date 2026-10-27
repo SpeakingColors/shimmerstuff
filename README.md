@@ -8,7 +8,7 @@ Status: pre-release 0.1.0. Every knob is automatable. The routing graph is saved
 
     sh tests/run.sh
 
-<p align="center"><img src="docs/screenshot.png" alt="shimmerstuff editor" width="900"><br><sub>Screenshot of the interactive mockup in docs/mockups.</sub></p>
+<p align="center"><img src="docs/screenshot.png" alt="shimmerstuff editor" width="900"><br><sub>Screenshot of the real plugin window (Linux standalone build).</sub></p>
 
 **Manual:** [PDF, opens in the browser](https://github.com/SpeakingColors/shimmerstuff/blob/main/docs/shimmerstuff-manual.pdf)
 
