@@ -8,7 +8,7 @@ static int fails = 0;
 // returns rms of the output for a 1 s noise burst followed by 1 s of silence (tail); checks for NaN
 static double run(const std::string& graph, bool rev, bool del, bool ifx, bool wfx, double* tailRms = nullptr) {
     Engine e; e.prepare(48000); e.revOn = rev; e.delOn = del; e.ifxOn = ifx; e.wfxOn = wfx;
-    e.rs.type = wm::engine::ReverbType::ShimmerHall; e.rs.mix = 0.4f; e.rs.p.decay = 0.6f; e.rs.p.dampHz = 6000;
+    e.rs.type = wm::engine::ReverbType::Hall; e.rs.shimmer = true; e.rs.mix = 0.4f; e.rs.p.decay = 0.6f; e.rs.p.dampHz = 6000;
     e.dp.mix = 0.4f; e.dp.timeMs = 300; e.dp.feedback = 0.5f; e.wp.squashMix = 0.5f; e.wp.satMix = 0.3f; e.ip.satMix = 0.2f;
     const Graph g = parseGraph(graph); std::mt19937 rng(7); std::uniform_real_distribution<float> d(-0.4f, 0.4f);
     double s = 0, t = 0;

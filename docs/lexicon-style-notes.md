@@ -35,3 +35,10 @@ Labels: **VERIFIED** (read in a primary document), **COMMUNITY** (forum or insid
 - The mockup shows the controls (playable, same code); the real plugin window does not yet. They are normal automatable parameters.
 - Standing UI rule: no text selection anywhere in a plugin window or mockup (inputs excepted).
 - Inverse and gated slopes, Chamber and Room variants, Concert Hall chorus: not built.
+
+## Rework, November 2026: modes, independent shimmer, delay voices
+- Shimmer is now its own switch (`shim_on`), not part of the Type. Type list is Plate, Hall, Velvet. Old saves migrate: old type 2 becomes Plate + shimmer on, 3 becomes Hall + shimmer on, 4 becomes Velvet.
+- Lexicat has a Mode choice (`lexmode`): Hall, Random Hall, Plate, Chamber, Room. Each mode sets size, movement, diffusion floor, pre-echo level, Shape scale and an output trim (measured so all modes sit within about 1 dB of Hall, Room about 1.4 dB louder).
+- The UI and mockup no longer say "Lexicon" anywhere; the name is Lexicat. This notes file stays as an internal research record.
+- Delay side, from the Lexicon Effects and Twin Delays ideas (own code): Voices (1 to 8, spread evenly over the delay time), Slope (voice level over time), Wander and Spin (smoothed random drift of the voices), Diffusion (three allpass stages on the input). All off by default, so old delay settings sound the same.
+- Not done: ear check of the modes against a real unit (needs the impulse recordings).

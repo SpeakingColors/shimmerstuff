@@ -18,7 +18,7 @@ static unsigned rs = 12345; static float rnd() { rs = rs * 1664525u + 1013904223
 // pink-ish noise (3 pole filter, Paul Kellet)
 struct Pink { float b0 = 0, b1 = 0, b2 = 0; float tick() { float w = rnd(); b0 = 0.99765f * b0 + w * 0.0990460f; b1 = 0.96300f * b1 + w * 0.2965164f; b2 = 0.57000f * b2 + w * 1.0526913f; return (b0 + b1 + b2 + w * 0.1848f) * 0.22f; } };
 static const char* tn[5] = {"Plate", "Hall", "ShimmerPlate", "ShimmerHall", "Velvet"};
-static ReverbSettings mk(int t) { ReverbSettings s; s.type = ReverbType(t); s.mix = 1.f; return s; }
+static ReverbSettings mk(int t) { ReverbSettings s; static const int ty[5] = {0, 1, 0, 1, 2}; s.type = ReverbType(ty[t]); s.shimmer = (t == 2 || t == 3); s.mix = 1.f; return s; }
 
 int main() {
     std::printf("== 1. Reverb, default settings, wet only (mix 100 %%) ==\n");

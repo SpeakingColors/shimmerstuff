@@ -4,7 +4,7 @@
 using APVTS = juce::AudioProcessorValueTreeState;
 using namespace wm;
 
-const juce::StringArray& ShimmerstuffProcessor::typeNames() { static const juce::StringArray n { "Plate", "Hall", "Shimmer Plate", "Shimmer Hall", "Velvet" }; return n; }
+const juce::StringArray& ShimmerstuffProcessor::typeNames() { static const juce::StringArray n { "Plate", "Hall", "Velvet" }; return n; }
 const char* ShimmerstuffProcessor::layoutGraph(int i)
 {
     static const char* g[kLayouts] = { "ifx>rev>del>wfx", "ifx>del>rev>wfx", "ifx>rev|del>wfx", "ifx>rev>wfx>del", "ifx>del>wfx>rev", "rev>del>wfx>ifx", "wfx>ifx>rev>del", "rev|del|ifx|wfx" };
@@ -39,12 +39,14 @@ const F kFloats[] = {
     { "w_duck", "Duck amount", 0.f, 1.f, 0.f, 0.f }, { "w_drel", "Duck release", 20.f, 1000.f, 250.f, 200.f },
     { "w_drate", "Duck rate", 0.25f, 16.f, 2.f, 2.f },
     // Lexicat (Lexicon-style reverb module) controls and twin-delay extras. New ids; older saved states do not contain them and get these defaults.
-    { "lexmix", "Lexicat blend", 0.f, 1.f, 0.f, 0.f }, { "lexrand", "Lexicat movement", 0.f, 1.f, 0.5f, 0.f },
+    { "lexmix", "Lexicat blend", 0.f, 1.f, 0.f, 0.f },
     { "bass", "Bass multiply", 0.5f, 2.5f, 1.3f, 0.f }, { "xover", "Bass crossover", 100.f, 2000.f, 500.f, 500.f },
     { "shape", "Shape", 0.f, 1.f, 0.5f, 0.f }, { "spread", "Spread", 0.f, 1.f, 0.4f, 0.f }, { "diff", "Diffusion", 0.f, 1.f, 0.7f, 0.f },
     { "spin", "Spin", 0.f, 1.f, 0.5f, 0.f }, { "wander", "Wander", 0.f, 1.f, 0.5f, 0.f }, { "early", "Pre-echoes", 0.f, 1.f, 0.5f, 0.f },
     { "dxfb", "Delay cross feedback", -1.f, 1.f, 0.f, 0.f }, { "dwide", "Delay width", 0.f, 0.5f, 0.f, 0.f },
     { "dtap2", "Delay second voice", 0.f, 1.f, 0.f, 0.f }, { "dratio2", "Second voice time", 0.25f, 1.5f, 0.5f, 0.f },
+    { "dvoices", "Delay voices", 1.f, 8.f, 1.f, 0.f }, { "dslope", "Delay slope", -1.f, 1.f, 0.f, 0.f }, { "dwander", "Delay wander", 0.f, 1.f, 0.f, 0.f },
+    { "dspin", "Delay spin", 0.f, 1.f, 0.5f, 0.f }, { "ddiff", "Delay diffusion", 0.f, 1.f, 0.f, 0.f },
 };
 
 }
@@ -52,7 +54,9 @@ const F kFloats[] = {
 APVTS::ParameterLayout ShimmerstuffProcessor::layout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
-    p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "type", 1 }, "Reverb type", typeNames(), 3));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "type", 1 }, "Reverb type", typeNames(), 1));
+    p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{ "shim_on", 1 }, "Shimmer on", true));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "lexmode", 1 }, "Lexicat mode", juce::StringArray { "Hall", "Random Hall", "Plate", "Chamber", "Room" }, 0));
     for (const auto& f : kFloats)
     {
         juce::NormalisableRange<float> r(f.lo, f.hi);
@@ -230,14 +234,15 @@ void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::Mi
 
     const bool byp = get("byp") > .5f;
     eng.revOn = get("rev_on") > .5f; eng.delOn = get("del_on") > .5f; eng.ifxOn = get("ifx_on") > .5f; eng.wfxOn = get("wfx_on") > .5f;
-    auto& rs = eng.rs; rs.type = (wm::engine::ReverbType) juce::jlimit(0, 4, (int) get("type"));
+    auto& rs = eng.rs; rs.type = (wm::engine::ReverbType) juce::jlimit(0, 2, (int) get("type"));
     rs.p.decay = get("decay"); rs.p.dampHz = get("damp"); rs.p.preDelayMs = get("predelay"); rs.p.size = get("size"); rs.p.modDepth = get("mod"); rs.p.color = get("color");
     rs.p.bass = get("bass"); rs.p.xoverHz = get("xover"); rs.p.shape = get("shape"); rs.p.spread = get("spread"); rs.p.diffusion = get("diff");
-    rs.lexBlend = get("lexmix"); rs.p.lexRandom = get("lexrand");
+    rs.lexBlend = get("lexmix"); rs.p.lexMode = juce::jlimit(0, 4, (int) get("lexmode")); rs.shimmer = get("shim_on") > .5f;
     rs.p.spin = get("spin"); rs.p.wander = get("wander"); rs.p.early = get("early");
     rs.shimmerSemis = get("shift"); rs.shimmerAmount = get("shimmer"); rs.shimmer2Semis = get("shift2"); rs.shimmer2Amount = get("shimmer2");
     rs.wetHpHz = get("hp"); rs.wetLpHz = get("lp");
     auto& dp = eng.dp; dp.shiftSemis = get("dshift"); dp.shimmerAmount = get("dshim"); dp.dampHz = get("ddamp");
+    dp.voices = juce::jlimit(1, 8, (int) std::lround(get("dvoices"))); dp.slope = get("dslope"); dp.wander = get("dwander"); dp.spin = get("dspin"); dp.diffusion = get("ddiff");
     dp.crossFb = get("dxfb"); dp.wide = get("dwide"); dp.tap2 = get("dtap2"); dp.tap2Ratio = get("dratio2");
     eng.ip.hp = get("i_hp"); eng.ip.lp = get("i_lp"); eng.ip.drive = get("i_drive");
     auto& wp = eng.wp; wp.satDrive = get("w_drive"); wp.squashDepth = get("w_depth");
@@ -288,7 +293,16 @@ void ShimmerstuffProcessor::setStateInformation(const void* d, int s)
 {
     if (auto xml = getXmlFromBinary(d, s))
     {
-        apvts.replaceState(juce::ValueTree::fromXml(*xml));
+        auto tree = juce::ValueTree::fromXml(*xml);
+        auto param = [&](const char* id) { return tree.getChildWithProperty("id", id); };
+        if (auto t = param("type"); t.isValid() && !param("shim_on").isValid())   // older state: shimmer was part of the type
+        {
+            const int old = juce::roundToInt((float) t.getProperty("value", 3.f));
+            const int nt = old == 2 ? 0 : old == 3 ? 1 : old == 4 ? 2 : juce::jlimit(0, 2, old);
+            t.setProperty("value", (float) nt, nullptr);
+            juce::ValueTree c("PARAM"); c.setProperty("id", "shim_on", nullptr); c.setProperty("value", (old == 2 || old == 3) ? 1.f : 0.f, nullptr); tree.appendChild(c, nullptr);
+        }
+        apvts.replaceState(tree);
         const auto g = xml->getStringAttribute("graph", graphStr);
         const auto parsed = fx::parseGraph(g.toStdString());
         graphStr = juce::String(fx::graphString(parsed)); graph = parsed; graphCode.store(encodeGraph(graph));

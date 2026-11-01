@@ -60,7 +60,7 @@ struct ReverbParams {
     float spin = 0.5f;       // 0..1: speed of the slow random delay movement
     float wander = 0.5f;     // 0..1: depth of that movement
     float early = 0.5f;      // 0..1: level of the four pre-echoes
-    float lexRandom = 0.5f;  // 0..1: Lexicat movement, 0 = stable hall, 1 = big random-hall movement
+    int lexMode = 0;         // Lexicat mode: 0 Hall, 1 Random Hall, 2 Plate, 3 Chamber, 4 Room
 };
 
 class PlateReverb {
@@ -171,6 +171,17 @@ private:
 // modulated allpass inside every line (density), a two-band decay (Mid RT, Bass Multiply, Crossover, HF damping), slow random delay
 // movement (Spin, Wander, Movement) and four pre-echo taps (Pre-echoes) that bypass the tank.
 // Movement 0 = stable hall, 1 = the big, moving "random hall" character.
+struct LexModeInfo { float size, move, diffFloor, early, shapeMul, level; };   // level: trims every mode to the loudness of Hall (measured, tests/)
+inline const LexModeInfo& lexMode(int m) {
+    static const LexModeInfo t[5] = {
+        { 1.00f, 0.25f, 0.0f, 1.0f, 1.0f, 1.00f },    // Hall: stable, wide, natural build-up
+        { 1.00f, 1.00f, 0.0f, 1.0f, 1.0f, 1.00f },    // Random Hall: strong random movement, smooth long tail
+        { 0.55f, 0.30f, 0.9f, 0.25f, 0.2f, 0.66f },   // Plate: dense and bright from the start, almost no build-up
+        { 0.72f, 0.40f, 0.8f, 1.2f, 0.3f, 0.52f },    // Chamber: very dense, quick onset
+        { 0.42f, 0.15f, 0.7f, 1.4f, 0.2f, 0.41f } };  // Room: small, early reflections up front, very stable
+    return t[std::max(0, std::min(4, m))];
+}
+
 class LexReverb {
 public:
     static constexpr int N = 8;
@@ -196,12 +207,14 @@ public:
         injPreL_.push(inL); injPreR_.push(inR);                               // stereo input keeps the width
         float xl = inL, xr = inR;
         if (p.preDelayMs > 0) { const float pd = std::max(1.0f, p.preDelayMs * 0.001f * sr_); xl = injPreL_.read(pd); xr = injPreR_.read(pd); }
-        const float dg = 0.2f + 0.55f * clamp01(p.diffusion);
+        const LexModeInfo& md_ = lexMode(p.lexMode);
+        const float diffE = std::max(clamp01(p.diffusion), md_.diffFloor), sizeE = p.size * md_.size;
+        const float dg = 0.2f + 0.55f * diffE;
         for (int i = 0; i < 4; ++i) { xl = diffL_[i].tick(xl, dg); xr = diffR_[i].tick(xr, dg); }
         // Shape and Spread: the diffused input reaches the network through 8 taps across a window.
         injL_.push(xl); injR_.push(xr);
         const float winMs = 3.0f + 190.0f * clamp01(p.spread) * clamp01(p.spread);
-        const float sh = clamp01(p.shape);
+        const float sh = clamp01(p.shape * md_.shapeMul);
         float il = 0, ir = 0, wsum = 0;
         for (int k = 0; k < 8; ++k) {
             float w = (1.0f - sh) * (k == 0 ? 1.0f : 0.0f) + sh * float(k + 1) / 36.0f;
@@ -214,15 +227,15 @@ public:
         const float bass = std::max(0.3f, std::min(3.0f, p.bass));
         const float damp = std::exp(-2.0f * 3.14159265f * p.dampHz / sr_);
         const float kx = 1.0f - std::exp(-2.0f * 3.14159265f * std::min(p.xoverHz, 0.45f * sr_) / sr_);
-        const float mv = clamp01(p.lexRandom);
+        const float mv = md_.move;
         const float spinHz = 0.05f + (0.7f + 0.9f * mv) * p.spin;
-        const float wanderS = (0.0012f + 0.0073f * mv) * clamp01(p.wander) * sr_ * (0.5f + 0.5f * p.size);
-        const float apg = 0.3f + 0.3f * clamp01(p.diffusion);
+        const float wanderS = (0.0012f + 0.0073f * mv) * clamp01(p.wander) * sr_ * (0.5f + 0.5f * sizeE);
+        const float apg = 0.3f + 0.3f * diffE;
         float y[N], sum = 0;
         for (int i = 0; i < N; ++i) {
             advance(i, spinHz * (0.75f + 0.07f * float(i)));
             const float md = mod(i);
-            float len = kLines[i] * 0.001f * sr_ * p.size;
+            float len = kLines[i] * 0.001f * sr_ * sizeE;
             len = std::min(len, float(dl_[i].capacity()) - 2.0f * wanderS - 8.0f);
             float v = dl_[i].read(std::max(2.0f, len + wanderS * md));
             v = ap_[i].tick(v, apg, -0.25f * wanderS * md);               // modulated allpass: denser, smoother echoes
@@ -237,12 +250,12 @@ public:
         for (int i = 0; i < N; ++i) dl_[i].push(y[i] - mixk + (i % 2 ? ir : il) * 0.5f);
         outL = outR = 0;
         for (int i = 0; i < N; ++i) { (i % 2 ? outR : outL) += y[i] * (i & 2 ? -1.0f : 1.0f); }
-        outL *= 0.5f * kLevel; outR *= 0.5f * kLevel;
+        outL *= 0.5f * kLevel * md_.level; outR *= 0.5f * kLevel * md_.level;
         // Pre-echoes: four taps from the raw input, not affected by pre-delay, with a little spin movement.
-        const float lvl = 0.9f * clamp01(p.early);
+        const float lvl = std::min(1.0f, 0.9f * clamp01(p.early) * md_.early);
         for (int j = 0; j < 4; ++j) {
             eadvance(j, spinHz * 0.6f);
-            float d = kEarly[j] * 0.001f * sr_ * (0.4f + 0.6f * p.size) + 0.0004f * sr_ * clamp01(p.wander) * emod(j);
+            float d = kEarly[j] * 0.001f * sr_ * (0.4f + 0.6f * sizeE) + 0.0004f * sr_ * clamp01(p.wander) * emod(j);
             float e = raw_.read(std::max(2.0f, d)) * lvl * kEarlyG[j];
             (j % 2 ? outR : outL) += e;
         }
@@ -294,36 +307,68 @@ struct ShimmerDelayParams {
     float wide = 0.0f;       // 0..0.5: right channel delay is this much longer than the left
     float tap2 = 0.0f;       // 0..1: level of a second voice read from the same line
     float tap2Ratio = 0.5f;  // 0.25..1.5: second voice time as a multiple of the delay time
+    // Multi-voice cloud: voices spread evenly over the delay time, with random movement and input diffusion.
+    int voices = 1;          // 1..8 (1 = off)
+    float slope = 0.0f;      // -1..1: voice level over time (negative = decays, positive = swells)
+    float wander = 0.0f;     // 0..1: how far the voices drift in time
+    float spin = 0.5f;       // 0..1: how fast they drift
+    float diffusion = 0.0f;  // 0..1: smears the input so clicks turn into swishes
 };
 
 class ShimmerDelay {
 public:
-    void prepare(float sr) { sr_ = sr; dl_[0].prepare(int(3.2f * sr)); dl_[1].prepare(int(3.2f * sr)); ps_[0].prepare(sr); ps_[1].prepare(sr); reset(); }
-    void reset() { for (int c = 0; c < 2; ++c) { dl_[c].clear(); ps_[c].reset(); lp_[c] = 0; } }
+    void prepare(float sr) {
+        sr_ = sr; dl_[0].prepare(int(3.2f * sr)); dl_[1].prepare(int(3.2f * sr)); ps_[0].prepare(sr); ps_[1].prepare(sr);
+        for (int c = 0; c < 2; ++c) { dif_[c][0].prepare(int(0.0051f * sr)); dif_[c][1].prepare(int(0.0079f * sr)); dif_[c][2].prepare(int(0.0113f * sr)); }
+        reset();
+    }
+    void reset() {
+        for (int c = 0; c < 2; ++c) { dl_[c].clear(); ps_[c].reset(); lp_[c] = 0; for (auto& a : dif_[c]) a.clear(); }
+        for (int k = 0; k < kMaxV; ++k) { rng_[k] = 0x9E3779B9u * unsigned(k + 3); ph_[k] = float(k) / kMaxV; a_[k] = rnd(k); b_[k] = rnd(k); }
+    }
     void process(float inL, float inR, float& outL, float& outR, const ShimmerDelayParams& p) {
         float ratio = std::pow(2.0f, p.shiftSemis / 12.0f), damp = std::exp(-2.0f * 3.14159265f * p.dampHz / sr_);
-        float in[2] = {inL, inR}, out[2], fb[2], d2[2] = {0, 0};
+        float in[2] = {inL, inR}, out[2], fb[2], d2[2] = {0, 0}, dv[2] = {0, 0};
         const float maxD = float(dl_[0].capacity()) - 4.0f;
+        const int nv = std::max(1, std::min(kMaxV, p.voices));
+        const float wanderS = p.wander * 0.006f * sr_;                       // up to 6 ms of drift
+        const float spinHz = 0.05f + 1.2f * p.spin;
+        if (nv > 1 || p.wander > 0.0f) for (int k = 0; k < kMaxV; ++k) { ph_[k] += spinHz * (0.8f + 0.06f * float(k)) / sr_; if (ph_[k] >= 1.0f) { ph_[k] -= 1.0f; a_[k] = b_[k]; b_[k] = rnd(k); } }
         for (int c = 0; c < 2; ++c) {
-            const float t = std::min(maxD, std::max(2.0f, p.timeMs * 0.001f * sr_ * (c ? 1.0f + p.wide : 1.0f)));
+            const float base = std::min(maxD, std::max(2.0f, p.timeMs * 0.001f * sr_ * (c ? 1.0f + p.wide : 1.0f)));
+            const float t = std::min(maxD, std::max(2.0f, base + 0.25f * wanderS * mod(c)));   // the feedback voice moves a little only
             float d = dl_[c].read(t);
             lp_[c] = d * (1 - damp) + lp_[c] * damp;
             float shifted = ps_[c].tick(lp_[c], ratio);
             fb[c] = (lp_[c] * (1 - p.shimmerAmount) + shifted * p.shimmerAmount) * p.feedback;
-            if (p.tap2 > 0.0f) d2[c] = p.tap2 * dl_[c].read(std::min(maxD, std::max(2.0f, t * p.tap2Ratio)));
+            if (p.tap2 > 0.0f) d2[c] = p.tap2 * dl_[c].read(std::min(maxD, std::max(2.0f, base * p.tap2Ratio)));
+            if (nv > 1) {   // voices k = 1 .. nv-1 at base * k / nv, levels follow Slope
+                float sum = 0, wsq = 0;
+                for (int k = 1; k < nv; ++k) {
+                    const float w = std::exp(p.slope * 1.5f * (float(k) / float(nv) - 0.5f) * 2.0f);
+                    sum += w * dl_[c].read(std::min(maxD, std::max(2.0f, base * float(k) / float(nv) + wanderS * mod((k * 2 + c) % kMaxV)))); wsq += w * w;
+                }
+                dv[c] = 0.7f * sum / std::sqrt(std::max(1e-6f, wsq));   // energy-normalised for voices that do not match each other
+            }
         }
-        const float ax = std::min(1.0f, std::fabs(p.crossFb));                 // self share + cross share never exceeds the feedback setting
+        const float ax = std::min(1.0f, std::fabs(p.crossFb));                 // self share + cross share never exceed the feedback setting
         for (int c = 0; c < 2; ++c) {
-            dl_[c].push(in[c] + std::tanh(fb[c] * (1.0f - ax) + fb[1 - c] * p.crossFb));
-            out[c] = in[c] * (1 - p.mix) + (lp_[c] + d2[c]) * p.mix;
+            float x = in[c];
+            if (p.diffusion > 0.0f) { const float g = 0.15f + 0.5f * p.diffusion; for (auto& a : dif_[c]) x = a.tick(x, g); }
+            dl_[c].push(x + std::tanh(fb[c] * (1.0f - ax) + fb[1 - c] * p.crossFb));
+            out[c] = in[c] * (1 - p.mix) + (lp_[c] + d2[c] + dv[c]) * p.mix;
         }
         outL = out[0]; outR = out[1];
     }
 private:
-    float sr_ = 48000, lp_[2] = {}; DelayLine dl_[2]; PitchShifter ps_[2];
+    static constexpr int kMaxV = 8;
+    float rnd(int k) { rng_[k] = rng_[k] * 1664525u + 1013904223u; return float((rng_[k] >> 8) & 0xFFFF) / 32768.0f - 1.0f; }
+    float mod(int k) const { float t = ph_[k]; t = t * t * (3.0f - 2.0f * t); return a_[k] + (b_[k] - a_[k]) * t; }
+    float sr_ = 48000, lp_[2] = {}, ph_[kMaxV] = {}, a_[kMaxV] = {}, b_[kMaxV] = {}; unsigned rng_[kMaxV] = {};
+    DelayLine dl_[2]; PitchShifter ps_[2]; Allpass dif_[2][3];
 };
 
-enum class ReverbType { Plate, Hall, ShimmerPlate, ShimmerHall, Velvet };
+enum class ReverbType { Plate, Hall, Velvet };
 
 struct ReverbSettings {
     ReverbType type = ReverbType::Plate;
@@ -331,6 +376,7 @@ struct ReverbSettings {
     float shimmerSemis = 12.0f, shimmerAmount = 0.35f;   // amount of shifted tail fed back into the input
     float shimmer2Semis = 7.0f, shimmer2Amount = 0.0f;   // second shimmer voice (0 = off), own pitch and amount
     float wetHpHz = 20.0f, wetLpHz = 20000.0f;           // filters on the wet signal only (20 / 20000 = off)
+    bool shimmer = true;                                 // shimmer feedback on or off, independent of the type
     float lexBlend = 0.0f;                               // 0 = the chosen type only, 1 = Lexicat only, in between = both side by side
     float mix = 0.3f;
 };
@@ -365,7 +411,7 @@ public:
     void prepare(float sr) { plate_.prepare(sr); hall_.prepare(sr); velvet_.prepare(sr); lex_.prepare(sr); ps_[0].prepare(sr, 80); ps_[1].prepare(sr, 80); qs_[0].prepare(sr, 80); qs_[1].prepare(sr, 80); sr_ = sr; reset(); }
     void reset() { plate_.reset(); hall_.reset(); velvet_.reset(); lex_.reset(); ps_[0].reset(); ps_[1].reset(); qs_[0].reset(); qs_[1].reset(); last_[0] = last_[1] = 0; for (float& v : f_) v = 0; }
     void process(float inL, float inR, float& outL, float& outR, const ReverbSettings& s) {
-        bool shim = s.type == ReverbType::ShimmerPlate || s.type == ReverbType::ShimmerHall;
+        bool shim = s.shimmer && (s.shimmerAmount > 0.0f || s.shimmer2Amount > 0.0f);
         float ratio = std::pow(2.0f, s.shimmerSemis / 12.0f);
         float fl = inL, fr = inR;
         if (shim) {
@@ -376,7 +422,7 @@ public:
             // The plate alone is almost at unity loop gain at the longest decays, so shifted feedback pushes the loop past 1
             // (measured with tests/measure.sh section 3, 40 s of loud noise at decay 1.0 and full shimmer: peak 8.1 before this line, 3.6 after; the hall network stays stable).
             // Fade the feedback to a quarter between decay 0.9 and 1.0, plate only, so no factory preset changes.
-            if (s.type == ReverbType::ShimmerPlate) { const float dk = std::min(1.0f, std::max(0.25f, (1.0f - s.p.decay) / 0.1f)); g *= dk; g2 *= dk; }
+            if (s.type == ReverbType::Plate && s.lexBlend < 0.5f) { const float dk = std::min(1.0f, std::max(0.25f, (1.0f - s.p.decay) / 0.1f)); g *= dk; g2 *= dk; }
             fl += g * ps_[0].tick(last_[0], ratio);
             fr += g * ps_[1].tick(last_[1], ratio);
             if (s.shimmer2Amount > 0.0f) {
@@ -388,7 +434,7 @@ public:
         const float bl = std::min(1.0f, std::max(0.0f, s.lexBlend));
         float wl = 0, wr = 0, xl = 0, xr = 0;
         if (bl < 0.999f) {
-            if (s.type == ReverbType::Plate || s.type == ReverbType::ShimmerPlate) plate_.process(fl, fr, wl, wr, s.p);
+            if (s.type == ReverbType::Plate) plate_.process(fl, fr, wl, wr, s.p);
             else if (s.type == ReverbType::Velvet) velvet_.process(fl, fr, wl, wr, s.p);
             else hall_.process(fl, fr, wl, wr, s.p);
         }

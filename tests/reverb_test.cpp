@@ -51,7 +51,7 @@ int main() {
     for (int t8 = 0; t8 < 15; ++t8) {
         const int t = t8 % 5; const float blend = t8 < 5 ? 0.0f : t8 < 10 ? 0.5f : 1.0f;
         ReverbUnit r; r.prepare(sr);
-        ReverbSettings s; s.type = ReverbType(t); s.lexBlend = blend; s.mix = 1.0f; s.p.decay = 0.95f; s.shimmerAmount = 0.9f; s.shimmer2Amount = 1.0f; s.shimmer2Semis = 19;
+        static const int ty[5] = {0, 1, 0, 1, 2}; ReverbSettings s; s.type = ReverbType(ty[t]); s.shimmer = (t == 2 || t == 3); s.lexBlend = blend; s.mix = 1.0f; s.p.decay = 0.95f; s.shimmerAmount = 0.9f; s.shimmer2Amount = 1.0f; s.shimmer2Semis = 19;
         float peak = 0, l, rr; std::srand(1);
         for (int i = 0; i < 96000; ++i) { float n = (std::rand() / float(RAND_MAX) - 0.5f) * 2; r.process(n, n, l, rr, s); peak = std::max(peak, std::fabs(l)); }
         CHECK(std::isfinite(peak) && peak < 20.0f);
@@ -104,7 +104,7 @@ int main() {
     // 7. Second shimmer voice adds energy at its own pitch: with amount 0 it is exactly the same as before
     {
         ReverbUnit a, b; a.prepare(sr); b.prepare(sr);
-        ReverbSettings s; s.type = ReverbType::ShimmerHall; s.mix = 1.0f; s.shimmer2Semis = -12; s.shimmer2Amount = 0.0f;
+        ReverbSettings s; s.type = ReverbType::Hall; s.shimmer = true; s.mix = 1.0f; s.shimmer2Semis = -12; s.shimmer2Amount = 0.0f;
         ReverbSettings s2 = s; s2.shimmer2Amount = 1.0f;
         float la, lb, rr, diff = 0;
         for (int i = 0; i < 48000; ++i) { float x = i < 2400 ? std::sin(2*3.14159265f*440.0f*float(i)/sr) : 0.0f; a.process(x, x, la, rr, s); b.process(x, x, lb, rr, s2); if (i > 20000) diff += std::fabs(la - lb); }
@@ -125,24 +125,24 @@ int main() {
             return e;
         };
         for (int mv = 0; mv < 2; ++mv) {
-            auto a = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.decay = 0.4f; s.p.lexRandom = mv; });
-            auto b = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.decay = 0.8f; s.p.lexRandom = mv; });
+            auto a = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.decay = 0.4f; s.p.lexMode = mv; });
+            auto b = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.decay = 0.8f; s.p.lexMode = mv; });
             bool fin = true; for (float v : a) fin = fin && std::isfinite(v);
             CHECK(fin);
             CHECK(energy(a, 20000, 30000) > 1e-8f);
             CHECK(energy(b, 100000, 120000) > 4.0f * energy(a, 100000, 120000));
             CHECK(energy(b, 240000, 260000) < energy(b, 100000, 120000));
-            auto n1 = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.decay = 0.6f; s.p.bass = 1.0f; s.p.lexRandom = mv; });
-            auto n2 = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.decay = 0.6f; s.p.bass = 2.0f; s.p.lexRandom = mv; });
+            auto n1 = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.decay = 0.6f; s.p.bass = 1.0f; s.p.lexMode = mv; });
+            auto n2 = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.decay = 0.6f; s.p.bass = 2.0f; s.p.lexMode = mv; });
             float lowGain = band(n2, true, 120000, 160000) / (band(n1, true, 120000, 160000) + 1e-12f);
             float hiGain = band(n2, false, 120000, 160000) / (band(n1, false, 120000, 160000) + 1e-12f);
             CHECK(lowGain > 2.0f);
             CHECK(hiGain < 0.5f * lowGain);
-            auto fast = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.shape = 0.0f; s.p.lexRandom = mv; });
-            auto slow = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.shape = 1.0f; s.p.spread = 1.0f; s.p.lexRandom = mv; });
+            auto fast = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.shape = 0.0f; s.p.lexMode = mv; });
+            auto slow = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.shape = 1.0f; s.p.spread = 1.0f; s.p.lexMode = mv; });
             CHECK(energy(slow, 1400, 7200) < 0.6f * energy(fast, 1400, 7200));
-            auto e0 = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.early = 0.0f; s.p.lexRandom = mv; });
-            auto e1 = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.early = 1.0f; s.p.lexRandom = mv; });
+            auto e0 = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.early = 0.0f; s.p.lexMode = mv; });
+            auto e1 = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.early = 1.0f; s.p.lexMode = mv; });
             CHECK(energy(e1, 0, 2880) > energy(e0, 0, 2880));
         }
         // blend 0 is the plain reverb, exactly; blend 0.5 differs from both ends
@@ -164,7 +164,7 @@ int main() {
         };
         auto hallIr = ir(0.0f, ReverbType::Hall, [](ReverbSettings& s) { s.p.decay = 0.7f; s.p.modDepth = 0.0f; });
         auto lexStill = ir(1.0f, ReverbType::Hall, [](ReverbSettings& s) { s.p.decay = 0.7f; s.p.wander = 0.0f; });
-        auto lexMove = ir(1.0f, ReverbType::Hall, [](ReverbSettings& s) { s.p.decay = 0.7f; s.p.wander = 1.0f; s.p.lexRandom = 1.0f; });
+        auto lexMove = ir(1.0f, ReverbType::Hall, [](ReverbSettings& s) { s.p.decay = 0.7f; s.p.wander = 1.0f; s.p.lexMode = 1; });
         std::printf("tail ripple dB: Hall %.2f, Lexicat still %.2f, Lexicat moving %.2f\n", ripple(hallIr), ripple(lexStill), ripple(lexMove));
         CHECK(ripple(lexStill) < ripple(hallIr) && ripple(lexMove) < ripple(hallIr));   // Lexicat tail is smoother (less metallic) than Hall
     }
@@ -179,6 +179,29 @@ int main() {
         for (int i = 0; i < 96000; ++i) { float x = i == 0 ? 1.0f : 0.0f; c.process(x, 0.0f, lc, rc, pc); if (i > 2000) { eL += lc * lc; eR += rc * rc; } pk = std::max(pk, std::max(std::fabs(lc), std::fabs(rc))); }
         CHECK(std::isfinite(pk) && pk < 4.0f);
         CHECK(eR > 0.05f * eL);                                                       // the echo reaches the right channel although only the left was fed
+    }
+    // 10. New in this rework: shimmer is independent of the type; Lexicat modes differ and stay stable; delay voices
+    {
+        auto run = [&](ReverbType t, bool shim, int mode, float blend, float& peak) {
+            ReverbUnit r; r.prepare(sr); ReverbSettings s; s.type = t; s.shimmer = shim; s.lexBlend = blend; s.p.lexMode = mode; s.mix = 1.0f; s.p.decay = 0.9f; s.shimmerAmount = 0.6f;
+            float l, rr, e = 0; peak = 0;
+            for (int i = 0; i < 96000; ++i) { float x = i < 2400 ? std::sin(0.07f * float(i)) : 0.0f; r.process(x, x, l, rr, s); peak = std::max(peak, std::fabs(l)); if (i > 20000) e += l * l; if (!std::isfinite(l)) peak = 1e9f; }
+            return e;
+        };
+        float pk;
+        for (int t = 0; t < 3; ++t) {
+            float pOff, pOn; const float eOff = run(ReverbType(t), false, 0, 0.f, pOff), eOn = run(ReverbType(t), true, 0, 0.f, pOn);
+            CHECK(std::fabs(eOn - eOff) > 1e-4f * (eOff + 1e-9f));           // shimmer changes the sound for every type
+            CHECK(pOn < 4.0f && pOff < 4.0f);
+        }
+        float eM[5]; for (int m = 0; m < 5; ++m) { eM[m] = run(ReverbType::Hall, true, m, 1.0f, pk); CHECK(pk < 4.0f); }
+        int distinct = 0; for (int m = 1; m < 5; ++m) if (std::fabs(eM[m] - eM[0]) > 0.01f * eM[0]) ++distinct;
+        CHECK(distinct == 4);                                                   // each mode sounds different from Hall
+        std::printf("lexicat modes energy: %.3f %.3f %.3f %.3f %.3f\n", eM[0], eM[1], eM[2], eM[3], eM[4]);
+        ShimmerDelay a, b; a.prepare(sr); b.prepare(sr); ShimmerDelayParams p0, p1; p0.mix = p1.mix = 1.0f; p1.voices = 6; p1.slope = 0.5f; p1.wander = 0.8f; p1.spin = 0.6f; p1.diffusion = 0.7f; p1.feedback = 0.8f;
+        float la, lb, ra, rb, diff = 0, pk2 = 0;
+        for (int i = 0; i < 192000; ++i) { float x = i < 2400 ? std::sin(0.05f * float(i)) : 0.0f; a.process(x, x, la, ra, p0); b.process(x, x, lb, rb, p1); diff += std::fabs(la - lb); pk2 = std::max(pk2, std::max(std::fabs(lb), std::fabs(rb))); }
+        CHECK(diff > 1.0f && std::isfinite(pk2) && pk2 < 4.0f);                 // voices change the echo and stay bounded
     }
     if (!fails) std::puts("reverb_test: all passed");
     return fails ? 1 : 0;

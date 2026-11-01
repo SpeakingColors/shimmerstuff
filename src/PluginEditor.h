@@ -35,7 +35,7 @@ public:
 
 struct Knob : public juce::Component
 {
-    enum Kind { Pct, Size, Ms, Hz, St, Db, Plain };
+    enum Kind { Pct, Size, Ms, Hz, St, Db, Plain, Int };
     juce::Slider s { juce::Slider::RotaryVerticalDrag, juce::Slider::NoTextBox };
     juce::Label name, val;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> a;
@@ -65,7 +65,7 @@ public:
     void mouseDoubleClick(const juce::MouseEvent&) override;
     void tick();
     float rt60Seconds() const;
-    bool shimmerOn() const { const int t = (int) proc.get("type"); return t == 2 || t == 3; }
+    bool shimmerOn() const { return proc.get("shim_on") > .5f; }
 private:
     void measure();
     juce::Rectangle<float> plot() const;
@@ -206,10 +206,10 @@ private:
     std::vector<int> comboIds; std::vector<juce::File> userFiles, userMain;
     std::vector<float> selSnap[3]; juce::String selLabel[3];
     DecayView decay; ToneView toneRev, toneDel, toneFx; EchoView echo; RouteView route; ShapeView shape; LevelMeter meter;
-    Combo rType, lay, dMode, dSrc, dRatio;
-    Knob rk[13], dk[6], ik[4], wk[6], dukn[3];
-    juce::TextButton onBtn[4], revOn { "ON" }, delOn { "ON" };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aOn[4], aRev, aDel;
+    Combo rType, rMode, lay, dMode, dSrc, dRatio;
+    Knob rk[23], dk[15], ik[4], wk[6], dukn[3];
+    juce::TextButton shimTog { "SHIMMER ON" }, onBtn[4], revOn { "ON" }, delOn { "ON" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aOn[4], aRev, aDel, aShim;
     int slow = 0;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Body)
 };

@@ -144,6 +144,7 @@ void Knob::init(juce::Component& parent, juce::AudioProcessorValueTreeState& apv
             case Hz: return fmtHz(v);
             case St: return (v > 0.4 ? "+" : "") + juce::String(juce::roundToInt(v)) + " st";
             case Db: return juce::String(v, 1) + " dB";
+            case Int: return v < 1.5 ? juce::String("off") : juce::String(juce::roundToInt(v));
             default: { const int p = juce::roundToInt(v * 100.0); return (p > 0 ? "+" : "") + juce::String(p); }
         }
     };
@@ -191,7 +192,7 @@ void DecayView::measure()
     // the real reverb at a 16 kHz rate: a full wet impulse response, then Schroeder backward integration (energy decay curve)
     const float sr = 16000.f; wm::engine::ReverbUnit u; u.prepare(sr);
     wm::engine::ReverbSettings s;
-    s.type = (wm::engine::ReverbType) juce::jlimit(0, 4, (int) proc.get("type"));
+    s.type = (wm::engine::ReverbType) juce::jlimit(0, 2, (int) proc.get("type")); s.shimmer = proc.get("shim_on") > .5f; s.lexBlend = proc.get("lexmix"); s.p.lexMode = juce::jlimit(0, 4, (int) proc.get("lexmode"));
     s.p.decay = proc.get("decay"); s.p.dampHz = proc.get("damp"); s.p.preDelayMs = proc.get("predelay"); s.p.size = proc.get("size");
     s.p.modDepth = proc.get("mod"); s.p.color = proc.get("color"); s.shimmerSemis = proc.get("shift"); s.shimmerAmount = proc.get("shimmer");
     s.shimmer2Semis = proc.get("shift2"); s.shimmer2Amount = proc.get("shimmer2"); s.wetHpHz = proc.get("hp"); s.wetLpHz = juce::jmin(proc.get("lp"), 7500.f); s.mix = 1.f;
@@ -597,7 +598,7 @@ void RouteView::paint(juce::Graphics& g)
         if (big)
         {
             juce::String sub = nodeSub(b.node);
-            if (b.node == wm::fx::kRev) sub = ShimmerstuffProcessor::typeNames()[juce::jlimit(0, 4, (int) proc.get("type"))];
+            if (b.node == wm::fx::kRev) sub = ShimmerstuffProcessor::typeNames()[juce::jlimit(0, 2, (int) proc.get("type"))];
             if (b.node == wm::fx::kDel) sub = (proc.get("dshift") > 0.4f ? "+" : "") + juce::String(juce::roundToInt(proc.get("dshift"))) + " st per repeat";
             g.setColour(col::dim); g.setFont(font(11.f, false, 0.03f)); g.drawText(sub, r.withTrimmedTop(26.f).withHeight(16.f).toNearestInt(), juce::Justification::centred);
         }
@@ -754,26 +755,53 @@ Body::Body(ShimmerstuffProcessor& p)
     for (auto* v : { (juce::Component*) &decay, (juce::Component*) &toneRev, (juce::Component*) &toneDel, (juce::Component*) &toneFx, (juce::Component*) &echo, (juce::Component*) &route, (juce::Component*) &shape }) addChildComponent(*v);
     addAndMakeVisible(meter); peakReset.toFront(false);
     auto& a = p.apvts;
-    rType.init(*this, a, "type", "Type", ShimmerstuffProcessor::typeNames(), "Plate, hall, shimmer plate (tail pitch shifted back into the reverb), shimmer hall, or velvet (dense and smooth).");
+    rType.init(*this, a, "type", "Type", ShimmerstuffProcessor::typeNames(), "Plate (bright and dense), hall (bigger and smoother) or velvet (dense and soft). Shimmer has its own switch.");
+    rMode.init(*this, a, "lexmode", "Mode", juce::StringArray { "Hall", "Random Hall", "Plate", "Chamber", "Room" }, "Hall: stable, wide, natural build-up. Random Hall: strong random movement for a big, smooth, long tail. Plate: dense and bright from the start. Chamber: very dense, quick onset. Room: small, early reflections up front. Every mode is level matched.");
+    shimTog.setClickingTogglesState(true); addAndMakeVisible(shimTog); shimTog.setColour(juce::TextButton::buttonOnColourId, col::sel); shimTog.setColour(juce::TextButton::textColourOnId, col::yellow);
+    shimTog.setTooltip("Turns the shimmer on or off for any reverb type, Lexicat included. Changing the type does not touch it.");
+    aShim = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(a, "shim_on", shimTog);
     lay.init(*this, a, "route", "Layout", ShimmerstuffProcessor::layoutNames(), "Ready made arrangements of Input FX, Reverb, Delay and Wet FX. You can also drag the boxes in the diagram; a layout of your own shows as Custom.");
     dMode.init(*this, a, "w_dmode", "Timing", juce::StringArray { "Follow the source", "Free (Hz)", "BPM sync" }, "Follow: the effect dips while the source plays (classic tail duck). Free: a repeating shape in Hz. BPM sync: a repeating shape locked to the host tempo.");
     dSrc.init(*this, a, "w_dsrc", "Sidechain source", juce::StringArray { "None", "Plugin input (dry)", "Sidechain input" }, "Where the duck listens. Sidechain input: the plugin's sidechain (enable it in your DAW).");
     dRatio.init(*this, a, "w_dratio", "Ratio", ShimmerstuffProcessor::ratioNames(), "Length of one duck cycle at the host tempo (4/4). 1/4 is one beat.");
     shape.setTooltip("Duck shape: click one. Taller means more ducking at that moment of the cycle.");
     struct K { const char* id; const char* name; Knob::Kind k; };
-    const K rks[13] = { { "decay", "Decay", Knob::Pct }, { "size", "Size", Knob::Size }, { "predelay", "Pre-delay", Knob::Ms }, { "mod", "Modulation", Knob::Pct }, { "color", "Velvet colour", Knob::Plain },
+    const K rks[22] = { { "decay", "Decay", Knob::Pct }, { "size", "Size", Knob::Size }, { "predelay", "Pre-delay", Knob::Ms }, { "mod", "Modulation", Knob::Pct }, { "color", "Velvet colour", Knob::Plain },
         { "shift", "Pitch", Knob::St }, { "shimmer", "Amount", Knob::Pct }, { "shift2", "Pitch 2", Knob::St }, { "shimmer2", "Amount 2", Knob::Pct },
-        { "damp", "Damping", Knob::Hz }, { "hp", "Wet HP", Knob::Hz }, { "lp", "Wet LP", Knob::Hz }, { "mix", "Mix", Knob::Pct } };
-    const char* rtip[13] = { "Tail length. Drag the yellow dot in the Decay view sideways too.", "Room size. Drag the yellow dot up or down too.", "Gap before the reverb starts. Drag the cyan handle too.", "Slow movement inside the tail, for a lusher sound.",
+        { "damp", "Damping", Knob::Hz }, { "hp", "Wet HP", Knob::Hz }, { "lp", "Wet LP", Knob::Hz }, { "mix", "Mix", Knob::Pct },
+        { "lexmix", "Blend", Knob::Pct }, { "bass", "Bass x", Knob::Size }, { "xover", "Crossover", Knob::Hz }, { "shape", "Shape", Knob::Pct }, { "spread", "Spread", Knob::Pct },
+        { "diff", "Diffusion", Knob::Pct }, { "spin", "Spin", Knob::Pct }, { "wander", "Wander", Knob::Pct }, { "early", "Pre-echoes", Knob::Pct } };
+    const char* rtip[22] = { "Tail length. Drag the yellow dot in the Decay view sideways too.", "Room size. Drag the yellow dot up or down too.", "Gap before the reverb starts. Drag the cyan handle too.", "Slow movement inside the tail, for a lusher sound.",
         "Velvet only: dark to bright tilt.", "Pitch of the shimmer voice fed back into the reverb (shimmer types).", "How much shifted tail is fed back (shimmer types). Drag the orange handle too.", "Pitch of the second shimmer voice.", "Amount of the second shimmer voice. 0 is off.",
-        "Darkens the tail. Drag the blue handle or the line in the Tone view too.", "High-pass on the reverb tail only. Keeps the tail out of the bass.", "Low-pass on the reverb tail only.", "Reverb dry/wet. Drag the pink handle too." };
-    const juce::Colour rcol[13] = { col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::yellow, col::yellow, col::yellow, col::yellow, col::blue, col::blue, col::blue, col::pink };
-    for (int i = 0; i < 13; ++i) rk[i].init(*this, a, rks[i].id, rks[i].name, rks[i].k, rcol[i], rtip[i]);
-    const K dks[6] = { { "dtime", "Time", Knob::Ms }, { "dfb", "Feedback", Knob::Pct }, { "dshift", "Shift", Knob::St }, { "dshim", "Shimmer", Knob::Pct }, { "ddamp", "Damping", Knob::Hz }, { "dmix", "Mix", Knob::Pct } };
-    const char* dtip[6] = { "Time between repeats. Drag the first dot in the Echoes view too.", "How much of each repeat goes back in. Drag the second dot too.", "Pitch change added at every repeat. +12 climbs an octave each time.",
-        "How much of each repeat is shifted. 0 is a plain delay.", "Darkens every repeat a little more.", "Delay dry/wet." };
-    const juce::Colour dcol[6] = { col::mint, col::mint, col::yellow, col::yellow, col::blue, col::pink };
-    for (int i = 0; i < 6; ++i) dk[i].init(*this, a, dks[i].id, dks[i].name, dks[i].k, dcol[i], dtip[i]);
+        "Darkens the tail. Drag the blue handle or the line in the Tone view too.", "High-pass on the reverb tail only. Keeps the tail out of the bass.", "Low-pass on the reverb tail only.", "Reverb dry/wet. Drag the pink handle too.",
+        "How much Lexicat is mixed with the reverb type. 0 is the type only, 100 % is Lexicat only, in between you hear both. With shimmer on, the shifted tail feeds both.",
+        "Bass multiply: how much longer the lows ring than the mids. 1.0 is even, 1.5 or less sounds like a real hall, 2 gives a big boomy bottom.",
+        "Where the bass multiply takes over. About two octaves above the low note you want to lengthen.",
+        "How the reverb builds up. 0: the tail starts at once. Higher: it swells in slowly. Works with Spread.",
+        "How long that build-up lasts. Only matters when Shape is above 0.",
+        "How fast the echoes thicken. High is smooth and good for drums. Low to medium keeps vocals and mixes clear.",
+        "Speed of the slow random movement of the delays. Movement smooths the tail so it is less metallic.",
+        "How far the delays move. Random Hall mode moves them the most. Too much makes held notes waver in pitch.",
+        "Level of four early reflections that bypass the tail and ignore pre-delay." };
+    const juce::Colour rcol[22] = { col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::yellow, col::yellow, col::yellow, col::yellow, col::blue, col::blue, col::blue, col::pink,
+        col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac };
+    for (int i = 0; i < 22; ++i) rk[i].init(*this, a, rks[i].id, rks[i].name, rks[i].k, rcol[i], rtip[i]);
+    const K dks[15] = { { "dtime", "Time", Knob::Ms }, { "dfb", "Feedback", Knob::Pct }, { "dshift", "Shift", Knob::St }, { "dshim", "Shimmer", Knob::Pct }, { "ddamp", "Damping", Knob::Hz }, { "dmix", "Mix", Knob::Pct },
+        { "dxfb", "Cross fb", Knob::Plain }, { "dwide", "Width", Knob::Pct }, { "dtap2", "2nd voice", Knob::Pct }, { "dratio2", "2nd time", Knob::Size }, { "dvoices", "Voices", Knob::Int },
+        { "dslope", "Slope", Knob::Plain }, { "dwander", "Wander", Knob::Pct }, { "dspin", "Spin", Knob::Pct }, { "ddiff", "Diffusion", Knob::Pct } };
+    const char* dtip[15] = { "Time between repeats. Drag the first dot in the Echoes view too.", "How much of each repeat goes back in. Drag the second dot too.", "Pitch change added at every repeat. +12 climbs an octave each time.",
+        "How much of each repeat is shifted. 0 is a plain delay.", "Darkens every repeat a little more.", "Delay dry/wet.",
+        "Sends the repeats to the other channel so they bounce left and right. Negative flips the sign of each bounce for a hollow, phasey feel. 0 is off.",
+        "Makes the right channel delay longer than the left by this much, so the echoes spread across the stereo field. 0 is off.",
+        "Level of a second echo read from the same delay at a different time. 0 is off.",
+        "Time of the second voice as a multiple of the delay time. 0.5 is half the time, 0.75 a dotted rhythm against it.",
+        "Extra echoes spread evenly across the delay time, like a cloud of taps. 1 is off.",
+        "Level of the extra voices over time. Negative: they die away. Positive: they swell toward the main echo. Needs Voices above 1.",
+        "How far the voices drift in time, up to 6 ms. 0 is off.",
+        "Speed of that drift. Only matters with Wander or Voices.",
+        "Smears the input so a click becomes a soft swish before it echoes. 0 is off." };
+    const juce::Colour dcol[15] = { col::mint, col::mint, col::yellow, col::yellow, col::blue, col::pink, col::mint, col::mint, col::mint, col::mint, col::mint, col::mint, col::mint, col::mint, col::mint };
+    for (int i = 0; i < 15; ++i) dk[i].init(*this, a, dks[i].id, dks[i].name, dks[i].k, dcol[i], dtip[i]);
     const K iks[4] = { { "i_hp", "Input HP", Knob::Hz }, { "i_lp", "Input LP", Knob::Hz }, { "i_drive", "Drive", Knob::Db }, { "i_mix", "Sat mix", Knob::Pct } };
     const char* itip[4] = { "Cuts lows before they reach the effects.", "Cuts highs before they reach the effects.", "Saturation on the signal that feeds the effects. Antialiased.", "Dry/wet of the input saturation. 0 is off." };
     const juce::Colour icol[4] = { col::blue, col::blue, col::yellow, col::pink };
@@ -997,7 +1025,8 @@ void Body::layoutTab()
     for (auto& k : ik) k.setVisible(false);
     for (auto& k : wk) k.setVisible(false);
     for (auto& k : dukn) k.setVisible(false);
-    for (auto* c : { &rType, &lay, &dMode, &dSrc, &dRatio }) c->setVisible(false);
+    for (auto* c : { &rType, &rMode, &lay, &dMode, &dSrc, &dRatio }) c->setVisible(false);
+    shimTog.setVisible(false);
     for (auto& b : onBtn) b.setVisible(false);
     revOn.setVisible(false); delOn.setVisible(false);
     panels.clear();
@@ -1005,24 +1034,29 @@ void Body::layoutTab()
     auto knobRow = [&](Knob* ks, int n, int x, int y, int cw) { for (int i = 0; i < n; ++i) place(ks[i], x + i * cw, y, cw, 76); };
     if (tab == 0)
     {
-        const int rowH = 112, p2 = bottom - rowH, p1 = p2 - 8 - rowH;
+        const int rowH = 112, p3 = bottom - rowH, p2 = p3 - 8 - rowH, p1 = p2 - 8 - rowH;
         if (sub[0] == 0) decay.setVisible(true); else toneRev.setVisible(true);
         decay.setBounds(L, dispTop, LW, p1 - 8 - dispTop); toneRev.setBounds(decay.getBounds());
         panels.push_back({ { L, p1, LW, rowH }, 1, "SPACE", "type and size of the room" });
-        panels.push_back({ { L, p2, 532, rowH }, 2, "SHIMMER", "for the two shimmer types" });
+        panels.push_back({ { L, p2, 532, rowH }, 2, "SHIMMER", "pitch shifted copy fed into the tail" });
         panels.push_back({ { L + 540, p2, 532, rowH }, 3, "TONE AND MIX", "what reaches the output" });
+        panels.push_back({ { L, p3, LW, rowH }, 4, "LEXICAT", "our second reverb engine, runs side by side with the type above" });
         place(revOn, L + LW - 78, p1 + 6, 66, 24);
         place(rType, L + 12, p1 + 44, 132, 52); knobRow(rk, 5, L + 160, p1 + 32, 100);
+        place(shimTog, L + 532 - 130, p2 + 6, 118, 24);
         knobRow(rk + 5, 4, L + 16, p2 + 32, 100); knobRow(rk + 9, 4, L + 540 + 16, p2 + 32, 100);
+        place(rMode, L + 12, p3 + 44, 132, 52); knobRow(rk + 13, 9, L + 160, p3 + 32, 100);
     }
     else if (tab == 1)
     {
-        const int rowH = 120, p1 = bottom - rowH, w3 = (LW - 16) / 3;
+        const int rowH = 120, pB = bottom - rowH, p1 = pB - 8 - rowH, w3 = (LW - 16) / 3;
         if (sub[1] == 0) echo.setVisible(true); else toneDel.setVisible(true);
         echo.setBounds(L, dispTop, LW, p1 - 8 - dispTop); toneDel.setBounds(echo.getBounds());
         panels.push_back({ { L, p1, w3, rowH }, 1, "ECHO", "timing and repeats" }); panels.push_back({ { L + w3 + 8, p1, w3, rowH }, 2, "SHIMMER", "pitch of the repeats" }); panels.push_back({ { L + 2 * (w3 + 8), p1, w3, rowH }, 3, "TONE AND MIX", "what reaches the output" });
+        panels.push_back({ { L, pB, LW, rowH }, 4, "VOICES AND MOVEMENT", "cross feedback, width, extra voices, drift and diffusion" });
         place(delOn, L + w3 - 78, p1 + 6, 66, 24);
         knobRow(dk, 2, L + 16, p1 + 38, 110); knobRow(dk + 2, 2, L + w3 + 8 + 16, p1 + 38, 110); knobRow(dk + 4, 2, L + 2 * (w3 + 8) + 16, p1 + 38, 110);
+        knobRow(dk + 6, 9, L + 16, pB + 38, 114);
     }
     else
     {
@@ -1069,7 +1103,9 @@ void Body::tickFrame()
         if (tab == 0)
         {
             const bool sh = decay.shimmerOn(); for (int i = 5; i < 9; ++i) rk[i].setAlpha(sh ? 1.f : 0.4f);
-            rk[4].setAlpha((int) proc.get("type") == 4 ? 1.f : 0.35f);
+            rk[4].setAlpha((int) proc.get("type") == 2 ? 1.f : 0.35f);
+            const bool lx = proc.get("lexmix") > 0.001f; for (int i = 14; i < 22; ++i) rk[i].setAlpha(lx ? 1.f : 0.35f); rMode.setAlpha(lx ? 1.f : 0.35f);
+            shimTog.setAlpha(1.f);
         }
         const bool off = (tab == 0 && proc.get("rev_on") < .5f) || (tab == 1 && proc.get("del_on") < .5f);
         if (turnOn.isVisible() != off) turnOn.setVisible(off);

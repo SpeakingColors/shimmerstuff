@@ -9,8 +9,8 @@ namespace ssp
 using V = std::vector<std::pair<const char*, float>>;
 struct Pre { const char* name; V v; const char* graph = nullptr; };
 
-inline const std::vector<const char*>& reverbKeys() { static const std::vector<const char*> k { "rev_on", "type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "mix", "bass", "xover", "shape", "spread", "diff", "spin", "wander", "early", "lexmix", "lexrand" }; return k; }
-inline const std::vector<const char*>& delayKeys() { static const std::vector<const char*> k { "del_on", "dtime", "dfb", "dshift", "dshim", "ddamp", "dmix", "dxfb", "dwide", "dtap2", "dratio2" }; return k; }
+inline const std::vector<const char*>& reverbKeys() { static const std::vector<const char*> k { "rev_on", "type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "mix", "bass", "xover", "shape", "spread", "diff", "spin", "wander", "early", "lexmix", "lexmode", "shim_on" }; return k; }
+inline const std::vector<const char*>& delayKeys() { static const std::vector<const char*> k { "del_on", "dtime", "dfb", "dshift", "dshim", "ddamp", "dmix", "dxfb", "dwide", "dtap2", "dratio2", "dvoices", "dslope", "dwander", "dspin", "ddiff" }; return k; }
 inline const std::vector<const char*>& fxKeys() { static const std::vector<const char*> k { "route", "rev_on", "del_on", "ifx_on", "wfx_on", "i_hp", "i_lp", "i_drive", "i_mix", "w_drive", "w_smix", "w_depth", "w_qmix", "w_duck", "w_drel", "w_dmode", "w_dsrc", "w_dshape", "w_drate", "w_dratio", "w_width", "w_boost" }; return k; }
 
 // w_dmode: 0 follow, 1 free, 2 BPM sync. w_dsrc: 0 none, 1 plugin input, 2 sidechain. w_dratio: 0 1/16, 1 1/8, 2 1/4, 3 1/2, 4 1 bar, 5 2 bars, 6 4 bars.
@@ -18,15 +18,15 @@ inline const std::vector<Pre>& reverbPresets()
 {
     static const std::vector<Pre> p = {
         { "Init", {} },
-        { "Shimmer Pad Bloom", { { "type", 3 }, { "decay", .75f }, { "size", 1.2f }, { "shimmer", .45f }, { "mix", .4f }, { "hp", 200 }, { "lp", 9000 } } },
-        { "Hoover Lead Tail", { { "type", 1 }, { "decay", .92f }, { "predelay", 204 }, { "hp", 290 }, { "lp", 4950 }, { "mix", .23f }, { "shimmer", 0 } } },
-        { "Plate Snare", { { "type", 0 }, { "decay", .25f }, { "predelay", 0 }, { "hp", 150 }, { "lp", 12000 }, { "mix", .3f }, { "shimmer", 0 } } },
-        { "Velvet Wash", { { "type", 4 }, { "decay", .7f }, { "mod", .6f }, { "color", .2f }, { "mix", .35f }, { "hp", 180 }, { "lp", 10000 }, { "shimmer", 0 } } },
-        { "Octave Up Cathedral", { { "type", 3 }, { "decay", .9f }, { "size", 1.5f }, { "predelay", 60 }, { "shift", 12 }, { "shimmer", .6f }, { "shift2", 7 }, { "shimmer2", .25f }, { "mix", .45f }, { "hp", 250 }, { "lp", 8000 } } },
-        { "Fifths Shimmer Plate", { { "type", 2 }, { "decay", .6f }, { "shift", 7 }, { "shimmer", .5f }, { "shift2", 12 }, { "shimmer2", .3f }, { "mix", .35f }, { "hp", 200 } } },
-        { "Down Drone", { { "type", 3 }, { "decay", .85f }, { "size", 1.4f }, { "shift", -12 }, { "shimmer", .5f }, { "mix", .5f }, { "hp", 120 }, { "lp", 5000 } } },
-        { "Tight Room", { { "type", 1 }, { "decay", .1f }, { "size", .5f }, { "predelay", 5 }, { "mix", .2f }, { "shimmer", 0 } } },
-        { "Trance Pluck Space", { { "type", 1 }, { "decay", .55f }, { "predelay", 80 }, { "mod", .4f }, { "mix", .3f }, { "hp", 300 }, { "lp", 9000 }, { "shimmer", 0 } } },
+        { "Shimmer Pad Bloom", { { "type", 1 }, { "shim_on", 1 }, { "decay", .75f }, { "size", 1.2f }, { "shimmer", .45f }, { "mix", .4f }, { "hp", 200 }, { "lp", 9000 } } },
+        { "Hoover Lead Tail", { { "type", 1 }, { "shim_on", 0 }, { "decay", .92f }, { "predelay", 204 }, { "hp", 290 }, { "lp", 4950 }, { "mix", .23f }, { "shimmer", 0 } } },
+        { "Plate Snare", { { "type", 0 }, { "shim_on", 0 }, { "decay", .25f }, { "predelay", 0 }, { "hp", 150 }, { "lp", 12000 }, { "mix", .3f }, { "shimmer", 0 } } },
+        { "Velvet Wash", { { "type", 2 }, { "shim_on", 0 }, { "decay", .7f }, { "mod", .6f }, { "color", .2f }, { "mix", .35f }, { "hp", 180 }, { "lp", 10000 }, { "shimmer", 0 } } },
+        { "Octave Up Cathedral", { { "type", 1 }, { "shim_on", 1 }, { "decay", .9f }, { "size", 1.5f }, { "predelay", 60 }, { "shift", 12 }, { "shimmer", .6f }, { "shift2", 7 }, { "shimmer2", .25f }, { "mix", .45f }, { "hp", 250 }, { "lp", 8000 } } },
+        { "Fifths Shimmer Plate", { { "type", 0 }, { "shim_on", 1 }, { "decay", .6f }, { "shift", 7 }, { "shimmer", .5f }, { "shift2", 12 }, { "shimmer2", .3f }, { "mix", .35f }, { "hp", 200 } } },
+        { "Down Drone", { { "type", 1 }, { "shim_on", 1 }, { "decay", .85f }, { "size", 1.4f }, { "shift", -12 }, { "shimmer", .5f }, { "mix", .5f }, { "hp", 120 }, { "lp", 5000 } } },
+        { "Tight Room", { { "type", 1 }, { "shim_on", 0 }, { "decay", .1f }, { "size", .5f }, { "predelay", 5 }, { "mix", .2f }, { "shimmer", 0 } } },
+        { "Trance Pluck Space", { { "type", 1 }, { "shim_on", 0 }, { "decay", .55f }, { "predelay", 80 }, { "mod", .4f }, { "mix", .3f }, { "hp", 300 }, { "lp", 9000 }, { "shimmer", 0 } } },
     };
     return p;
 }
@@ -71,7 +71,7 @@ struct Main { const char* name; const char* rev; const char* del; const char* fx
 inline const std::vector<Main>& mainPresets()
 {
     static const std::vector<Main> p = {
-        { "Init (reverb only)", "Init", "Init", "Init (reverb only)", { { "type", 3 }, { "decay", .6f }, { "mix", .35f } } },
+        { "Init (reverb only)", "Init", "Init", "Init (reverb only)", { { "type", 1 }, { "shim_on", 1 }, { "decay", .6f }, { "mix", .35f } } },
         { "Hoover Lead Space", "Hoover Lead Tail", "Lead Echo (dotted 1/8 at 150)", "Lead Space (HP in, duck)", {} },
         { "Trance Pluck Wash", "Trance Pluck Space", "Subtle Shimmer Slap", "Parallel Space", {} },
         { "Pumping Shimmer Pad", "Shimmer Pad Bloom", "Octave Echo", "Sync Pump 1/4", { { "del_on", 0 } } },
