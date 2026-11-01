@@ -60,6 +60,7 @@ struct ReverbParams {
     float spin = 0.5f;       // 0..1: speed of the slow random delay movement
     float wander = 0.5f;     // 0..1: depth of that movement
     float early = 0.5f;      // 0..1: level of the four pre-echoes
+    float lexRandom = 0.5f;  // 0..1: Lexicat movement, 0 = stable hall, 1 = big random-hall movement
 };
 
 class PlateReverb {
@@ -165,16 +166,18 @@ private:
 };
 
 
-// Lexicon-style reverb (original code, written from the control set and the published reverb literature; no Lexicon code).
-// Signal path: pre-delay, 4 input diffusers (Diffusion), a shaped injection window (Shape, Spread), an 8-line feedback
-// network with a two-band decay (Mid RT, Bass Multiply, Crossover, HF damping) and slow random delay movement (Spin, Wander),
-// plus four pre-echo taps (Early) that bypass the tank. random=true gives the larger, smoother "Random Hall" movement.
+// Lexicat: a Lexicon-style reverb module (original code, written from the control set and the published reverb literature; no Lexicon code).
+// Signal path: pre-delay, 4 input diffusers (Diffusion), a shaped injection window (Shape, Spread), an 8-line feedback network with a
+// modulated allpass inside every line (density), a two-band decay (Mid RT, Bass Multiply, Crossover, HF damping), slow random delay
+// movement (Spin, Wander, Movement) and four pre-echo taps (Pre-echoes) that bypass the tank.
+// Movement 0 = stable hall, 1 = the big, moving "random hall" character.
 class LexReverb {
 public:
     static constexpr int N = 8;
+    static constexpr float kLevel = 1.9f;   // output level match against Hall (see tests); the shimmer feedback tap divides it out again
     void prepare(float sr) {
         sr_ = sr;
-        for (int i = 0; i < N; ++i) dl_[i].prepare(int(0.32f * sr));
+        for (int i = 0; i < N; ++i) { dl_[i].prepare(int(0.32f * sr)); ap_[i].prepare(int(kApMs[i] * 0.001f * sr), int(0.003f * sr) + 8); }
         for (int i = 0; i < 4; ++i) { diffL_[i].prepare(int(kDiff[i] * 0.001f * sr), 40); diffR_[i].prepare(int((kDiff[i] + 1.9f) * 0.001f * sr), 40); }
         raw_.prepare(int(0.3f * sr)); injL_.prepare(int(0.5f * sr)); injR_.prepare(int(0.5f * sr));
         injPreL_.prepare(int(0.5f * sr)); injPreR_.prepare(int(0.5f * sr));
@@ -182,21 +185,22 @@ public:
     }
     void reset() {
         for (auto& d : dl_) d.clear();
+        for (auto& a : ap_) a.clear();
         for (int i = 0; i < 4; ++i) { diffL_[i].clear(); diffR_[i].clear(); }
         raw_.clear(); injL_.clear(); injR_.clear(); injPreL_.clear(); injPreR_.clear();
         for (int i = 0; i < N; ++i) { lp_[i] = lo_[i] = 0; rng_[i] = 0x9E3779B9u * (unsigned(i) + 1u); ph_[i] = float(i) / N; a_[i] = rnd(i); b_[i] = rnd(i); }
-        for (int j = 0; j < 4; ++j) { eph_[j] = 0.25f * float(j); ea_[j] = ernd(j); eb_[j] = ernd(j); erng_[j] = 0x85EBCA6Bu * (unsigned(j) + 7u); }
+        for (int j = 0; j < 4; ++j) { eph_[j] = 0.25f * float(j); erng_[j] = 0x85EBCA6Bu * (unsigned(j) + 7u); ea_[j] = ernd(j); eb_[j] = ernd(j); }
     }
-    void process(float inL, float inR, float& outL, float& outR, const ReverbParams& p, bool random) {
+    void process(float inL, float inR, float& outL, float& outR, const ReverbParams& p) {
         raw_.push(0.5f * (inL + inR));
         injPreL_.push(inL); injPreR_.push(inR);                               // stereo input keeps the width
         float xl = inL, xr = inR;
         if (p.preDelayMs > 0) { const float pd = std::max(1.0f, p.preDelayMs * 0.001f * sr_); xl = injPreL_.read(pd); xr = injPreR_.read(pd); }
         const float dg = 0.2f + 0.55f * clamp01(p.diffusion);
         for (int i = 0; i < 4; ++i) { xl = diffL_[i].tick(xl, dg); xr = diffR_[i].tick(xr, dg); }
-        // Shape and Spread: the diffused input reaches the network through 8 taps spread over a window.
+        // Shape and Spread: the diffused input reaches the network through 8 taps across a window.
         injL_.push(xl); injR_.push(xr);
-        const float winMs = 3.0f + 190.0f * clamp01(p.spread) * clamp01(p.spread);   // window length
+        const float winMs = 3.0f + 190.0f * clamp01(p.spread) * clamp01(p.spread);
         const float sh = clamp01(p.shape);
         float il = 0, ir = 0, wsum = 0;
         for (int k = 0; k < 8; ++k) {
@@ -210,15 +214,19 @@ public:
         const float bass = std::max(0.3f, std::min(3.0f, p.bass));
         const float damp = std::exp(-2.0f * 3.14159265f * p.dampHz / sr_);
         const float kx = 1.0f - std::exp(-2.0f * 3.14159265f * std::min(p.xoverHz, 0.45f * sr_) / sr_);
-        const float spinHz = (random ? 0.05f + 1.4f * p.spin : 0.05f + 0.9f * p.spin);
-        const float wanderS = (random ? 0.0085f : 0.0012f) * clamp01(p.wander) * sr_ * (0.5f + 0.5f * p.size);
+        const float mv = clamp01(p.lexRandom);
+        const float spinHz = 0.05f + (0.7f + 0.9f * mv) * p.spin;
+        const float wanderS = (0.0012f + 0.0073f * mv) * clamp01(p.wander) * sr_ * (0.5f + 0.5f * p.size);
+        const float apg = 0.3f + 0.3f * clamp01(p.diffusion);
         float y[N], sum = 0;
         for (int i = 0; i < N; ++i) {
             advance(i, spinHz * (0.75f + 0.07f * float(i)));
+            const float md = mod(i);
             float len = kLines[i] * 0.001f * sr_ * p.size;
             len = std::min(len, float(dl_[i].capacity()) - 2.0f * wanderS - 8.0f);
-            float v = dl_[i].read(std::max(2.0f, len + wanderS * mod(i)));
-            float lenS = len / sr_;
+            float v = dl_[i].read(std::max(2.0f, len + wanderS * md));
+            v = ap_[i].tick(v, apg, -0.25f * wanderS * md);               // modulated allpass: denser, smoother echoes
+            const float lenS = (len + kApMs[i] * 0.001f * sr_) / sr_;     // the allpass is part of the loop length
             float gMid = std::min(0.9995f, std::pow(10.0f, -3.0f * lenS / rt60));
             float gLow = std::min(0.9995f, std::pow(10.0f, -3.0f * lenS / (rt60 * bass)));
             lp_[i] = v * (1 - damp) + lp_[i] * damp;
@@ -229,7 +237,7 @@ public:
         for (int i = 0; i < N; ++i) dl_[i].push(y[i] - mixk + (i % 2 ? ir : il) * 0.5f);
         outL = outR = 0;
         for (int i = 0; i < N; ++i) { (i % 2 ? outR : outL) += y[i] * (i & 2 ? -1.0f : 1.0f); }
-        outL *= 0.5f; outR *= 0.5f;
+        outL *= 0.5f * kLevel; outR *= 0.5f * kLevel;
         // Pre-echoes: four taps from the raw input, not affected by pre-delay, with a little spin movement.
         const float lvl = 0.9f * clamp01(p.early);
         for (int j = 0; j < 4; ++j) {
@@ -248,13 +256,14 @@ private:
     float mod(int i) const { float t = ph_[i]; t = t * t * (3.0f - 2.0f * t); return a_[i] + (b_[i] - a_[i]) * t; }
     float emod(int j) const { float t = eph_[j]; t = t * t * (3.0f - 2.0f * t); return ea_[j] + (eb_[j] - ea_[j]) * t; }
     static constexpr float kLines[N] = {31.3f, 37.9f, 43.1f, 47.9f, 53.9f, 61.1f, 67.3f, 73.9f};      // ms, mutually near-prime
+    static constexpr float kApMs[N] = {5.3f, 7.1f, 8.9f, 10.7f, 6.1f, 9.7f, 11.3f, 12.9f};           // allpass inside each line, ms
     static constexpr float kDiff[4] = {4.7f, 6.9f, 10.3f, 14.3f};
     static constexpr float kEarly[4] = {11.0f, 17.5f, 26.0f, 38.0f};
     static constexpr float kEarlyG[4] = {0.8f, 0.65f, 0.5f, 0.4f};
     float sr_ = 48000, lp_[N] = {}, lo_[N] = {}, ph_[N] = {}, a_[N] = {}, b_[N] = {}, eph_[4] = {}, ea_[4] = {}, eb_[4] = {};
     unsigned rng_[N] = {}, erng_[4] = {};
     DelayLine dl_[N], raw_, injL_, injR_, injPreL_, injPreR_;
-    Allpass diffL_[4], diffR_[4];
+    Allpass ap_[N], diffL_[4], diffR_[4];
 };
 
 class PitchShifter {
@@ -314,7 +323,7 @@ private:
     float sr_ = 48000, lp_[2] = {}; DelayLine dl_[2]; PitchShifter ps_[2];
 };
 
-enum class ReverbType { Plate, Hall, ShimmerPlate, ShimmerHall, Velvet, LexHall, LexRandom, ShimmerLex };
+enum class ReverbType { Plate, Hall, ShimmerPlate, ShimmerHall, Velvet };
 
 struct ReverbSettings {
     ReverbType type = ReverbType::Plate;
@@ -322,6 +331,7 @@ struct ReverbSettings {
     float shimmerSemis = 12.0f, shimmerAmount = 0.35f;   // amount of shifted tail fed back into the input
     float shimmer2Semis = 7.0f, shimmer2Amount = 0.0f;   // second shimmer voice (0 = off), own pitch and amount
     float wetHpHz = 20.0f, wetLpHz = 20000.0f;           // filters on the wet signal only (20 / 20000 = off)
+    float lexBlend = 0.0f;                               // 0 = the chosen type only, 1 = Lexicat only, in between = both side by side
     float mix = 0.3f;
 };
 
@@ -355,7 +365,7 @@ public:
     void prepare(float sr) { plate_.prepare(sr); hall_.prepare(sr); velvet_.prepare(sr); lex_.prepare(sr); ps_[0].prepare(sr, 80); ps_[1].prepare(sr, 80); qs_[0].prepare(sr, 80); qs_[1].prepare(sr, 80); sr_ = sr; reset(); }
     void reset() { plate_.reset(); hall_.reset(); velvet_.reset(); lex_.reset(); ps_[0].reset(); ps_[1].reset(); qs_[0].reset(); qs_[1].reset(); last_[0] = last_[1] = 0; for (float& v : f_) v = 0; }
     void process(float inL, float inR, float& outL, float& outR, const ReverbSettings& s) {
-        bool shim = s.type == ReverbType::ShimmerPlate || s.type == ReverbType::ShimmerHall || s.type == ReverbType::ShimmerLex;
+        bool shim = s.type == ReverbType::ShimmerPlate || s.type == ReverbType::ShimmerHall;
         float ratio = std::pow(2.0f, s.shimmerSemis / 12.0f);
         float fl = inL, fr = inR;
         if (shim) {
@@ -375,13 +385,17 @@ public:
                 fr += g2 * qs_[1].tick(last_[1], r2);
             }
         }
-        float wl, wr;
-        if (s.type == ReverbType::Plate || s.type == ReverbType::ShimmerPlate) plate_.process(fl, fr, wl, wr, s.p);
-        else if (s.type == ReverbType::Velvet) velvet_.process(fl, fr, wl, wr, s.p);
-        else if (s.type == ReverbType::LexHall) lex_.process(fl, fr, wl, wr, s.p, false);
-        else if (s.type == ReverbType::LexRandom || s.type == ReverbType::ShimmerLex) lex_.process(fl, fr, wl, wr, s.p, true);
-        else hall_.process(fl, fr, wl, wr, s.p);
-        last_[0] = std::tanh(wl); last_[1] = std::tanh(wr);   // feedback tap taken before the output filters
+        const float bl = std::min(1.0f, std::max(0.0f, s.lexBlend));
+        float wl = 0, wr = 0, xl = 0, xr = 0;
+        if (bl < 0.999f) {
+            if (s.type == ReverbType::Plate || s.type == ReverbType::ShimmerPlate) plate_.process(fl, fr, wl, wr, s.p);
+            else if (s.type == ReverbType::Velvet) velvet_.process(fl, fr, wl, wr, s.p);
+            else hall_.process(fl, fr, wl, wr, s.p);
+        }
+        if (bl > 0.001f) lex_.process(fl, fr, xl, xr, s.p);
+        const float fbl = wl * (1.0f - bl) + xl * bl * (1.0f / LexReverb::kLevel), fbr = wr * (1.0f - bl) + xr * bl * (1.0f / LexReverb::kLevel);   // feedback tap keeps the old loop gain
+        wl = wl * (1.0f - bl) + xl * bl; wr = wr * (1.0f - bl) + xr * bl;
+        last_[0] = std::tanh(fbl); last_[1] = std::tanh(fbr);   // feedback tap taken before the output filters
         if (s.wetHpHz > 20.5f || s.wetLpHz < 19999.0f) {
             const float kh = 1.0f - std::exp(-6.2831853f * std::min(s.wetHpHz, 0.45f * sr_) / sr_);
             const float kl = 1.0f - std::exp(-6.2831853f * std::min(s.wetLpHz, 0.45f * sr_) / sr_);

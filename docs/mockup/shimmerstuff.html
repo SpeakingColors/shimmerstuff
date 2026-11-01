@@ -49,6 +49,8 @@ button:hover { border-color:#4a4d58; }
 button[aria-pressed="true"],button.on { background:#0f2a26; border-color:var(--cL); color:var(--cL); }
 button:disabled { opacity:.45; cursor:default; }
 button:focus-visible,.knob:focus-visible,.pname:focus-visible,select:focus-visible,input:focus-visible { outline:2px solid #6CC9F5; outline-offset:2px; }
+* { -webkit-user-select:none; user-select:none; }
+input[type=text],textarea { -webkit-user-select:text; user-select:text; }
 select,input[type=text],textarea { font:inherit; font-size:13px; letter-spacing:.04em; background:#0a0a0c; color:var(--ink); border:1px solid var(--line); border-radius:3px; padding:6px 8px; }
 textarea { width:100%; min-height:110px; font-family:var(--f-num); font-size:12px; letter-spacing:0; }
 .plist { position:absolute; top:100%; left:0; right:0; z-index:30; margin-top:4px; background:#0a0a0c; border:1px solid #4a4d58; border-radius:4px; max-height:340px; overflow:auto; box-shadow:0 12px 30px #000c; }
@@ -583,10 +585,10 @@ Hall.prototype.process = function (inL, inR, p) {
 };
 
 
-/* Lexicon-style reverb (original code from the control set and public literature). Same structure as the plugin's LexReverb. */
-var LXL = [31.3, 37.9, 43.1, 47.9, 53.9, 61.1, 67.3, 73.9], LXD = [4.7, 6.9, 10.3, 14.3], LXE = [11, 17.5, 26, 38], LXG = [0.8, 0.65, 0.5, 0.4];
+/* Lexicat: Lexicon-style reverb module (original code from the control set and public literature). Same structure as the plugin's LexReverb. */
+var LXL = [31.3, 37.9, 43.1, 47.9, 53.9, 61.1, 67.3, 73.9], LXA = [5.3, 7.1, 8.9, 10.7, 6.1, 9.7, 11.3, 12.9], LXD = [4.7, 6.9, 10.3, 14.3], LXE = [11, 17.5, 26, 38], LXG = [0.8, 0.65, 0.5, 0.4], LXLEVEL = 1.9;
 function Lex() {
-  var i; this.sr = 48000; this.dl = []; this.dL = []; this.dR = []; for (i = 0; i < 8; i++) this.dl.push(new DL()); for (i = 0; i < 4; i++) { this.dL.push(new AP()); this.dR.push(new AP()); }
+  var i; this.sr = 48000; this.dl = []; this.ap = []; this.dL = []; this.dR = []; for (i = 0; i < 8; i++) { this.dl.push(new DL()); this.ap.push(new AP()); } for (i = 0; i < 4; i++) { this.dL.push(new AP()); this.dR.push(new AP()); }
   this.raw = new DL(); this.iL = new DL(); this.iR = new DL(); this.pL = new DL(); this.pR = new DL();
   this.lp = new Float32Array(8); this.lo = new Float32Array(8); this.ph = new Float32Array(8); this.a = new Float32Array(8); this.b = new Float32Array(8); this.rng = new Uint32Array(8); this.y = new Float32Array(8);
   this.eph = new Float32Array(4); this.ea = new Float32Array(4); this.eb = new Float32Array(4); this.erng = new Uint32Array(4); this.oL = 0; this.oR = 0;
@@ -594,19 +596,19 @@ function Lex() {
 Lex.prototype.rnd = function (i) { this.rng[i] = (Math.imul(this.rng[i], 1664525) + 1013904223) >>> 0; return ((this.rng[i] >>> 8) & 0xFFFF) / 32768 - 1; };
 Lex.prototype.ernd = function (j) { this.erng[j] = (Math.imul(this.erng[j], 1664525) + 1013904223) >>> 0; return ((this.erng[j] >>> 8) & 0xFFFF) / 32768 - 1; };
 Lex.prototype.prepare = function (sr) {
-  var i; this.sr = sr; for (i = 0; i < 8; i++) this.dl[i].prepare(Math.floor(0.32 * sr));
+  var i; this.sr = sr; for (i = 0; i < 8; i++) { this.dl[i].prepare(Math.floor(0.32 * sr)); this.ap[i].prepare(Math.floor(LXA[i] * 0.001 * sr), Math.floor(0.003 * sr) + 8); }
   for (i = 0; i < 4; i++) { this.dL[i].prepare(Math.floor(LXD[i] * 0.001 * sr), 40); this.dR[i].prepare(Math.floor((LXD[i] + 1.9) * 0.001 * sr), 40); }
   this.raw.prepare(Math.floor(0.3 * sr)); this.iL.prepare(Math.floor(0.5 * sr)); this.iR.prepare(Math.floor(0.5 * sr)); this.pL.prepare(Math.floor(0.5 * sr)); this.pR.prepare(Math.floor(0.5 * sr)); this.reset();
 };
 Lex.prototype.reset = function () {
-  var i, j; for (i = 0; i < 8; i++) { this.dl[i].clear(); this.lp[i] = 0; this.lo[i] = 0; this.rng[i] = Math.imul(0x9E3779B9, i + 1) >>> 0; this.ph[i] = i / 8; this.a[i] = this.rnd(i); this.b[i] = this.rnd(i); }
+  var i, j; for (i = 0; i < 8; i++) { this.dl[i].clear(); this.ap[i].clear(); this.lp[i] = 0; this.lo[i] = 0; this.rng[i] = Math.imul(0x9E3779B9, i + 1) >>> 0; this.ph[i] = i / 8; this.a[i] = this.rnd(i); this.b[i] = this.rnd(i); }
   for (i = 0; i < 4; i++) { this.dL[i].clear(); this.dR[i].clear(); }
   this.raw.clear(); this.iL.clear(); this.iR.clear(); this.pL.clear(); this.pR.clear();
   for (j = 0; j < 4; j++) { this.eph[j] = 0.25 * j; this.erng[j] = Math.imul(0x85EBCA6B, j + 7) >>> 0; this.ea[j] = this.ernd(j); this.eb[j] = this.ernd(j); }
 };
 function c01(v) { return Math.max(0, Math.min(1, v)); }
 Lex.prototype.process = function (inL, inR, p) {
-  var sr = this.sr, i, k, j, rnd = !!p.random;
+  var sr = this.sr, i, k, j;
   this.raw.push(0.5 * (inL + inR)); this.pL.push(inL); this.pR.push(inR);
   var xl = inL, xr = inR; if (p.preDelayMs > 0) { var pd = Math.max(1, p.preDelayMs * 0.001 * sr); xl = this.pL.read(pd); xr = this.pR.read(pd); }
   var dg = 0.2 + 0.55 * c01(p.diffusion); for (i = 0; i < 4; i++) { xl = this.dL[i].tick(xl, dg); xr = this.dR[i].tick(xr, dg); }
@@ -615,19 +617,19 @@ Lex.prototype.process = function (inL, inR, p) {
   for (k = 0; k < 8; k++) { var w = (1 - sh) * (k === 0 ? 1 : 0) + sh * (k + 1) / 36, dly = Math.max(1, winMs * 0.001 * sr * k / 7); il += w * this.iL.read(dly); ir += w * this.iR.read(dly); ws += w; }
   il /= ws; ir /= ws;
   var rt60 = 0.3 + 9.7 * p.decay * p.decay, bass = Math.max(0.3, Math.min(3, p.bass)), damp = Math.exp(-TWO_PI * p.dampHz / sr), kx = 1 - Math.exp(-TWO_PI * Math.min(p.xoverHz, 0.45 * sr) / sr);
-  var spinHz = rnd ? 0.05 + 1.4 * p.spin : 0.05 + 0.9 * p.spin, wanderS = (rnd ? 0.0085 : 0.0012) * c01(p.wander) * sr * (0.5 + 0.5 * p.size), y = this.y, sum = 0;
+  var mv = c01(p.lexRandom), spinHz = 0.05 + (0.7 + 0.9 * mv) * p.spin, wanderS = (0.0012 + 0.0073 * mv) * c01(p.wander) * sr * (0.5 + 0.5 * p.size), apg = 0.3 + 0.3 * c01(p.diffusion), y = this.y, sum = 0;
   for (i = 0; i < 8; i++) {
     this.ph[i] += spinHz * (0.75 + 0.07 * i) / sr; if (this.ph[i] >= 1) { this.ph[i] -= 1; this.a[i] = this.b[i]; this.b[i] = this.rnd(i); }
     var t = this.ph[i]; t = t * t * (3 - 2 * t); var md = this.a[i] + (this.b[i] - this.a[i]) * t;
     var len = LXL[i] * 0.001 * sr * p.size; len = Math.min(len, this.dl[i].capacity() - 2 * wanderS - 8);
-    var v = this.dl[i].read(Math.max(2, len + wanderS * md)), lenS = len / sr;
-    var gMid = Math.min(0.9995, Math.pow(10, -3 * lenS / rt60)), gLow = Math.min(0.9995, Math.pow(10, -3 * lenS / (rt60 * bass)));
+    var v = this.dl[i].read(Math.max(2, len + wanderS * md)); v = this.ap[i].tick(v, apg, -0.25 * wanderS * md);
+    var lenS = (len + LXA[i] * 0.001 * sr) / sr, gMid = Math.min(0.9995, Math.pow(10, -3 * lenS / rt60)), gLow = Math.min(0.9995, Math.pow(10, -3 * lenS / (rt60 * bass)));
     this.lp[i] = v * (1 - damp) + this.lp[i] * damp; this.lo[i] += kx * (this.lp[i] - this.lo[i]);
     y[i] = this.lo[i] * gLow + (this.lp[i] - this.lo[i]) * gMid; sum += y[i];
   }
   var mk = sum * (2 / 8); for (i = 0; i < 8; i++) this.dl[i].push(y[i] - mk + (i % 2 ? ir : il) * 0.5);
   var oL = 0, oR = 0; for (i = 0; i < 8; i++) { var s2 = y[i] * ((i & 2) ? -1 : 1); if (i % 2) oR += s2; else oL += s2; }
-  oL *= 0.5; oR *= 0.5;
+  oL *= 0.5 * LXLEVEL; oR *= 0.5 * LXLEVEL;
   var lvl = 0.9 * c01(p.early);
   for (j = 0; j < 4; j++) {
     this.eph[j] += spinHz * 0.6 / sr; if (this.eph[j] >= 1) { this.eph[j] -= 1; this.ea[j] = this.eb[j]; this.eb[j] = this.ernd(j); }
@@ -675,22 +677,23 @@ Velvet.prototype.process = function (inL, inR, p) {
   this.oL = this.loL * (1 - t) + (oL - this.loL) * (1 + t); this.oR = this.loR * (1 - t) + (oR - this.loR) * (1 + t);
 };
 
-/* types: 0 plate, 1 hall, 2 shimmer plate, 3 shimmer hall, 4 velvet, 5 lex hall, 6 lex random, 7 shimmer lex */
+/* types: 0 plate, 1 hall, 2 shimmer plate, 3 shimmer hall, 4 velvet. Lexicat runs side by side with any of them (lexBlend). */
 function RUnit() { this.plate = new Plate(); this.hall = new Hall(); this.velvet = new Velvet(); this.lex = new Lex(); this.ps = [new PS(), new PS()]; this.qs = [new PS(), new PS()]; this.last = [0, 0]; this.f = [0, 0, 0, 0]; this.sr = 48000; this.oL = 0; this.oR = 0; }
 RUnit.prototype.prepare = function (sr) { this.sr = sr; this.plate.prepare(sr); this.hall.prepare(sr); this.velvet.prepare(sr); this.lex.prepare(sr); this.ps[0].prepare(sr, 80); this.ps[1].prepare(sr, 80); this.qs[0].prepare(sr, 80); this.qs[1].prepare(sr, 80); this.reset(); };
 RUnit.prototype.reset = function () { this.plate.reset(); this.hall.reset(); this.velvet.reset(); this.lex.reset(); this.ps[0].reset(); this.ps[1].reset(); this.qs[0].reset(); this.qs[1].reset(); this.last[0] = this.last[1] = 0; this.f = [0, 0, 0, 0]; };
 RUnit.prototype.process = function (inL, inR, s) {
-  var shim = s.type === 2 || s.type === 3 || s.type === 7, ratio = Math.pow(2, s.shimmerSemis / 12), fl = inL, fr = inR;
+  var shim = s.type === 2 || s.type === 3, ratio = Math.pow(2, s.shimmerSemis / 12), fl = inL, fr = inR;
   if (shim) {
     var g = 0.4 * Math.min(1, Math.max(0, s.shimmerAmount)), g2 = 0.4 * Math.min(1, Math.max(0, s.shimmer2Amount));
     if (g + g2 > 0.4) { var kk = 0.4 / (g + g2); g *= kk; g2 *= kk; }
     fl += g * this.ps[0].tick(this.last[0], ratio); fr += g * this.ps[1].tick(this.last[1], ratio);
     if (s.shimmer2Amount > 0) { var r2 = Math.pow(2, s.shimmer2Semis / 12); fl += g2 * this.qs[0].tick(this.last[0], r2); fr += g2 * this.qs[1].tick(this.last[1], r2); }
   }
-  var wl, wr, u;
-  if (s.type === 0 || s.type === 2) u = this.plate; else if (s.type === 4) u = this.velvet; else if (s.type >= 5) u = this.lex; else u = this.hall;
-  u.process(fl, fr, s.p); wl = u.oL; wr = u.oR;
-  this.last[0] = Math.tanh(wl); this.last[1] = Math.tanh(wr);
+  var wl = 0, wr = 0, u, bl = Math.min(1, Math.max(0, s.lexBlend || 0)), xl = 0, xr = 0;
+  if (bl < 0.999) { if (s.type === 0 || s.type === 2) u = this.plate; else if (s.type === 4) u = this.velvet; else u = this.hall; u.process(fl, fr, s.p); wl = u.oL; wr = u.oR; }
+  if (bl > 0.001) { this.lex.process(fl, fr, s.p); xl = this.lex.oL; xr = this.lex.oR; }
+  this.last[0] = Math.tanh(wl * (1 - bl) + xl * bl / LXLEVEL); this.last[1] = Math.tanh(wr * (1 - bl) + xr * bl / LXLEVEL);   /* feedback tap keeps the old loop gain */
+  wl = wl * (1 - bl) + xl * bl; wr = wr * (1 - bl) + xr * bl;
   if (s.wetHpHz > 20.5 || s.wetLpHz < 19999) {
     var kh = 1 - Math.exp(-TWO_PI * Math.min(s.wetHpHz, 0.45 * this.sr) / this.sr), kl = 1 - Math.exp(-TWO_PI * Math.min(s.wetLpHz, 0.45 * this.sr) / this.sr), f = this.f;
     f[0] += kl * (wl - f[0]); wl = f[0]; f[1] += kh * (wl - f[1]); wl -= f[1];
@@ -806,13 +809,13 @@ def("mode", "reverb"); def("src", "pluck"); def("trim", 0); def("byp", false); d
 def("type", 3); def("decay", 0.6); def("damp", 6000); def("predelay", 20); def("size", 1); def("mod", 0.5); def("color", 0);
 def("shift", 12); def("shimmer", 0.5); def("shift2", 7); def("shimmer2", 0); def("hp", 20); def("lp", 20000); def("mix", 0.35);
 def("graph", "ifx>rev>del>wfx"); def("rev_on", true); def("del_on", false); def("ifx_on", true); def("wfx_on", true); def("i_hp", 20); def("i_lp", 20000); def("i_drive", 6); def("i_mix", 0); def("w_drive", 8); def("w_smix", 0); def("w_depth", 0.6); def("w_qmix", 0); def("w_duck", 0); def("w_drel", 250); def("w_dmode", "follow"); def("w_dsrc", "input"); def("w_dshape", 0); def("w_drate", 2); def("w_dratio", 1); def("w_bpm", 140); def("w_width", 1); def("w_boost", 0);
-def("bass", 1.2); def("xover", 500); def("shape", 0.5); def("spread", 0.4); def("diff", 0.7); def("spin", 0.5); def("wander", 0.5); def("early", 0.5); def("dxfb", 0); def("dwide", 0); def("dtap2", 0); def("dratio2", 0.5);
+def("lexmix", 0); def("lexrand", 0.5); def("bass", 1.3); def("xover", 500); def("shape", 0.5); def("spread", 0.4); def("diff", 0.7); def("spin", 0.5); def("wander", 0.5); def("early", 0.5); def("dxfb", 0); def("dwide", 0); def("dtap2", 0); def("dratio2", 0.5);
 def("dtime", 450); def("dfb", 0.55); def("dshift", 12); def("dshim", 1); def("ddamp", 5000); def("dmix", 0.4);
-var RK = ["rev_on", "type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "mix", "bass", "xover", "shape", "spread", "diff", "spin", "wander", "early"];
+var RK = ["rev_on", "type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "mix", "bass", "xover", "shape", "spread", "diff", "spin", "wander", "early", "lexmix", "lexrand"];
 var DK = ["del_on", "dtime", "dfb", "dshift", "dshim", "ddamp", "dmix", "dxfb", "dwide", "dtap2", "dratio2"];
 var FK = ["graph", "rev_on", "del_on", "ifx_on", "wfx_on", "i_hp", "i_lp", "i_drive", "i_mix", "w_drive", "w_smix", "w_depth", "w_qmix", "w_duck", "w_drel", "w_dmode", "w_dsrc", "w_dshape", "w_drate", "w_dratio", "w_bpm", "w_width", "w_boost"];
 var MK = RK.concat(DK, FK);
-var MEAS_R = { type: 1, decay: 1, damp: 1, predelay: 1, size: 1, mod: 1, color: 1, shift: 1, shimmer: 1, shift2: 1, shimmer2: 1, hp: 1, lp: 1, bass: 1, xover: 1, shape: 1, spread: 1, diff: 1, spin: 1, wander: 1, early: 1 };
+var MEAS_R = { type: 1, decay: 1, damp: 1, predelay: 1, size: 1, mod: 1, color: 1, shift: 1, shimmer: 1, shift2: 1, shimmer2: 1, hp: 1, lp: 1, bass: 1, xover: 1, shape: 1, spread: 1, diff: 1, spin: 1, wander: 1, early: 1, lexmix: 1, lexrand: 1 };
 var MEAS_D = { dtime: 1, dfb: 1, dshift: 1, dshim: 1, ddamp: 1, dxfb: 1, dwide: 1, dtap2: 1, dratio2: 1 };
 var KW = {}, DD = {}, FXG = [];   /* knob wrappers, to dim the ones that do nothing for the current type */
 
@@ -857,13 +860,13 @@ function mkShapeDD(host) {
 
   function grp(host, n, title, sub, cls) { var d = document.createElement("div"); d.className = "g3" + (cls ? " " + cls : ""); d.innerHTML = '<div class="gh"><i>' + n + '</i>' + title + ' <small>' + sub + '</small></div>'; host.appendChild(d); return d; }
   var R = $("#fxR"), D = $("#fxD");
-  var g1 = grp(R, 1, "Space", "type and size of the room", "wide"), g2 = grp(R, 2, "Shimmer", "for the two shimmer types"), g3 = grp(R, 3, "Tone and mix", "what reaches the output"), g4 = grp(R, 4, "Lexicon style", "for Lex Hall, Lex Random and Shimmer Lex", "wide");
+  var g1 = grp(R, 1, "Space", "type and size of the room", "wide"), g2 = grp(R, 2, "Shimmer", "for the two shimmer types"), g3 = grp(R, 3, "Tone and mix", "what reaches the output"), g4 = grp(R, 4, "Lexicat", "a Lexicon-style hall that runs side by side with the type above", "wide");
   mkTog(g1, "rev_on", "\u23FB On", "Switches the reverb on or off. Same switch as the power icon on the Reverb box in FX and Routing: the routing you chose stays active on every tab, this tab is only for fine tuning.", true, "pwr");
-  mkSel(g1, "type", "Type", [[0, "Plate"], [1, "Hall"], [2, "Shimmer Plate"], [3, "Shimmer Hall"], [4, "Velvet"], [5, "Lex Hall"], [6, "Lex Random"], [7, "Shimmer Lex"]], "Plate: bright and dense, short to medium. Hall: bigger and smoother. Shimmer Plate and Shimmer Hall add a pitch shifted copy into the tail. Velvet: two halls blended, soft and dark to bright with Colour. Lex Hall, Lex Random and Shimmer Lex use the Lexicon style controls in group 4: Lex Hall is stable, Lex Random moves more and gives the big, smooth, long tail, Shimmer Lex adds the shimmer copy to that.");
+  mkSel(g1, "type", "Type", [[0, "Plate"], [1, "Hall"], [2, "Shimmer Plate"], [3, "Shimmer Hall"], [4, "Velvet"]], "Plate: bright and dense, short to medium. Hall: bigger and smoother. Shimmer Plate and Shimmer Hall add a pitch shifted copy into the tail. Velvet: two halls blended, soft and dark to bright with Colour. Lexicat (group 4) runs side by side with any type: turn its Blend up to mix it in.");
   mkKnob(g1, { id: "decay", label: "Decay", min: 0, max: 1, step: 0.01, def: 0.6, color: COL.rev, fmt: fmtPct, tip: "Length of the tail. The Decay display shows the real result in seconds, measured from the DSP." });
   mkKnob(g1, { id: "size", label: "Size", min: 0.5, max: 1.6, step: 0.01, def: 1, color: COL.rev, fmt: function (v) { return "x" + v.toFixed(2); }, tip: "Scales the delay lines: a small room or a big one. Bigger sounds slower and less dense." });
   mkKnob(g1, { id: "predelay", label: "Pre-delay", min: 0, max: 250, step: 1, def: 20, color: COL.rev, fmt: fmtMs, tip: "Gap before the tail starts. Keeps the dry sound clear. Around 200 ms suits a lead." });
-  KW.mod = mkKnob(g1, { id: "mod", label: "Modulation", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.rev, fmt: fmtPct, tip: "Slow movement inside the tail that stops it sounding metallic. The Lex types use Spin and Wander instead." });
+  KW.mod = mkKnob(g1, { id: "mod", label: "Modulation", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.rev, fmt: fmtPct, tip: "Slow movement inside the tail that stops it sounding metallic. Lexicat uses Spin and Wander instead." });
   KW.color = mkKnob(g1, { id: "color", label: "Velvet colour", min: -1, max: 1, step: 0.01, def: 0, mid: 0, color: COL.rev, fmt: function (v) { return (v > 0 ? "+" : "") + Math.round(v * 100); }, tip: "Velvet type only: negative is darker, positive is brighter." });
   KW.shift = mkKnob(g2, { id: "shift", label: "Pitch", min: -12, max: 12, step: 1, def: 12, mid: 0, color: COL.acc, fmt: fmtSt, tip: "Pitch of the shimmer copy that feeds back into the tail. +12 is an octave up." });
   KW.shimmer = mkKnob(g2, { id: "shimmer", label: "Amount", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.acc, fmt: fmtPct, tip: "How much of the tail is shifted and fed back. The plugin limits the total so it cannot run away." });
@@ -874,7 +877,9 @@ function mkShapeDD(host) {
   mkKnob(g3, { id: "lp", label: "Wet LP", min: 1000, max: 20000, log: true, def: 20000, color: COL.blue, fmt: fmtHz, tip: "Removes highs from the reverb only. Also draggable on the Tone view." });
   mkKnob(g3, { id: "mix", label: "Mix", min: 0, max: 1, step: 0.01, def: 0.35, color: COL.pink, fmt: fmtPct, tip: "Dry/wet. 0 is the dry signal only, 100 % is the reverb only." });
   var LK = [
-    ["bass", "Bass x", 0.5, 2.5, 0.01, 1.2, false, function (v) { return "x" + v.toFixed(2); }, "Bass multiply: how much longer the lows ring than the mids. 1.0 is even, 1.5 or less sounds like a real hall, 2 gives a big boomy bottom."],
+    ["lexmix", "Blend", 0, 1, 0.01, 0, false, fmtPct, "How much Lexicat is mixed with the reverb type above. 0 is the type only, 100 % is Lexicat only, in between you hear both. With a shimmer type the shifted tail feeds both."],
+    ["lexrand", "Movement", 0, 1, 0.01, 0.5, false, fmtPct, "From a stable hall (0) to the big, moving random hall sound (100 %). More movement means a smoother, longer-sounding tail."],
+    ["bass", "Bass x", 0.5, 2.5, 0.01, 1.3, false, function (v) { return "x" + v.toFixed(2); }, "Bass multiply: how much longer the lows ring than the mids. 1.0 is even, 1.5 or less sounds like a real hall, 2 gives a big boomy bottom."],
     ["xover", "Crossover", 100, 2000, 0, 500, true, fmtHz, "Where the bass multiply takes over. Set it about two octaves above the low note you want to lengthen. Around 500 Hz works for boosting lows."],
     ["shape", "Shape", 0, 1, 0.01, 0.5, false, fmtPct, "How the reverb builds up. 0: the tail starts at once. Higher: it swells in slowly. Works together with Spread."],
     ["spread", "Spread", 0, 1, 0.01, 0.4, false, fmtPct, "How long that build-up lasts. It only matters when Shape is above 0. Long values give a slow, wide swell."],
@@ -884,7 +889,7 @@ function mkShapeDD(host) {
     ["early", "Pre-echoes", 0, 1, 0.01, 0.5, false, fmtPct, "Level of four early reflections that bypass the tail and ignore pre-delay, like the sound bouncing off the stage walls."]
   ];
   LK.forEach(function (q) { KW[q[0]] = mkKnob(g4, { id: q[0], label: q[1], min: q[2], max: q[3], step: q[4] || undefined, log: q[6], def: q[5], color: COL.rev, fmt: q[7], tip: q[8] }); });
-  addUI("type", function () { UI.decay(S.decay); dimGroups(); });
+  addUI("type", function () { UI.decay(S.decay); dimGroups(); }); addUI("lexmix", dimGroups);
 
   var F = $("#fxF");
   var f1 = grp(F, 1, "Routing", "drag the boxes in the diagram"), f2 = grp(F, 2, "Input FX", "before the reverb and delay"), f3 = grp(F, 3, "Wet saturation and level", "the effect, not the dry"), f4 = grp(F, 4, "Squash", "lifts quiet tails, tames loud ones"), f5 = grp(F, 5, "Duck", "the effect dips, then swells back", "span2");
@@ -940,15 +945,14 @@ function dimGroups() {
   var sh = S.type === 2 || S.type === 3, vel = S.type === 4;
   ["shift", "shimmer", "shift2", "shimmer2"].forEach(function (k) { KW[k].style.opacity = sh ? 1 : 0.35; });
   KW.color.style.opacity = vel ? 1 : 0.35;
-  var lx = S.type >= 5; ["bass", "xover", "shape", "spread", "diff", "spin", "wander", "early"].forEach(function (k) { KW[k].style.opacity = lx ? 1 : 0.35; });
-  KW.mod.style.opacity = lx ? 0.35 : 1;
+  var lx = S.lexmix > 0.001; ["lexrand", "bass", "xover", "shape", "spread", "diff", "spin", "wander", "early"].forEach(function (k) { KW[k].style.opacity = lx ? 1 : 0.35; });
 }
 
 /* ---------- audio engine ---------- */
 var E = { node: null, inG: null, pre: null, post: null, srcNode: null, playing: false, fileBuf: null, cache: {}, ru: null, sd: null, clear: false, curT: 450, pk: { inL: 0, inR: 0, outL: 0, outR: 0, rms: 0 } };
 function revSettings(mixOverride) {
-  return { type: S.type | 0, shimmerSemis: S.shift, shimmerAmount: S.shimmer, shimmer2Semis: S.shift2, shimmer2Amount: S.shimmer2, wetHpHz: S.hp, wetLpHz: S.lp, mix: mixOverride === undefined ? S.mix : mixOverride,
-    p: { decay: S.decay, dampHz: S.damp, preDelayMs: S.predelay, size: S.size, modDepth: S.mod, color: S.color, bass: S.bass, xoverHz: S.xover, shape: S.shape, spread: S.spread, diffusion: S.diff, spin: S.spin, wander: S.wander, early: S.early, random: S.type === 6 || S.type === 7 } };
+  return { type: S.type | 0, lexBlend: S.lexmix, shimmerSemis: S.shift, shimmerAmount: S.shimmer, shimmer2Semis: S.shift2, shimmer2Amount: S.shimmer2, wetHpHz: S.hp, wetLpHz: S.lp, mix: mixOverride === undefined ? S.mix : mixOverride,
+    p: { decay: S.decay, dampHz: S.damp, preDelayMs: S.predelay, size: S.size, modDepth: S.mod, color: S.color, bass: S.bass, xoverHz: S.xover, shape: S.shape, spread: S.spread, diffusion: S.diff, spin: S.spin, wander: S.wander, early: S.early, lexRandom: S.lexrand } };
 }
 /* how much of the dry stays: every unit that is on takes (1 - its mix); side by side stages average */
 function dryGainGraph() {
@@ -1434,7 +1438,7 @@ PAINT.push(function (dt, ts) {
 });
 
 /* ---------- factory presets ---------- */
-function rp(name, o) { var v = { type: 3, decay: 0.6, damp: 6000, predelay: 20, size: 1, mod: 0.5, color: 0, shift: 12, shimmer: 0.5, shift2: 7, shimmer2: 0, hp: 20, lp: 20000, mix: 0.35, bass: 1.2, xover: 500, shape: 0.5, spread: 0.4, diff: 0.7, spin: 0.5, wander: 0.5, early: 0.5 }; for (var k in o) v[k] = o[k]; return { name: name, v: v }; }
+function rp(name, o) { var v = { type: 3, decay: 0.6, damp: 6000, predelay: 20, size: 1, mod: 0.5, color: 0, shift: 12, shimmer: 0.5, shift2: 7, shimmer2: 0, hp: 20, lp: 20000, mix: 0.35, lexmix: 0, lexrand: 0.5, bass: 1.3, xover: 500, shape: 0.5, spread: 0.4, diff: 0.7, spin: 0.5, wander: 0.5, early: 0.5 }; for (var k in o) v[k] = o[k]; return { name: name, v: v }; }
 function dpr(name, o) { var v = { dtime: 450, dfb: 0.55, dshift: 12, dshim: 1, ddamp: 5000, dmix: 0.4, dxfb: 0, dwide: 0, dtap2: 0, dratio2: 0.5 }; for (var k in o) v[k] = o[k]; return { name: name, v: v }; }
 var FACT_R = [
   rp("Shimmer Pad Bloom", { type: 3, decay: 0.75, size: 1.2, shimmer: 0.45, mix: 0.4, hp: 200, lp: 9000 }),
@@ -1445,10 +1449,10 @@ var FACT_R = [
   rp("Fifths Shimmer Plate", { type: 2, decay: 0.6, shift: 7, shimmer: 0.5, shift2: 12, shimmer2: 0.3, mix: 0.35, hp: 200 }),
   rp("Down Drone", { type: 3, decay: 0.85, size: 1.4, shift: -12, shimmer: 0.5, mix: 0.5, hp: 120, lp: 5000 }),
   rp("Tight Room", { type: 1, decay: 0.1, size: 0.5, predelay: 5, mix: 0.2, shimmer: 0 }),
-  rp("Lex Large Hall", { type: 5, decay: 0.68, size: 1.4, predelay: 25, bass: 1.3, xover: 500, shape: 0.5, spread: 0.45, diff: 0.55, spin: 0.35, wander: 0.35, early: 0.6, damp: 5000, mix: 0.3, hp: 100, shimmer: 0 }),
-  rp("Lex Random Bloom", { type: 6, decay: 0.82, size: 1.5, predelay: 40, bass: 1.4, shape: 0.6, spread: 0.55, diff: 0.7, spin: 0.55, wander: 0.55, early: 0.4, damp: 4500, mix: 0.35, hp: 120, shimmer: 0 }),
-  rp("Lex Tight Plate Feel", { type: 5, decay: 0.3, size: 0.6, predelay: 0, bass: 1, shape: 0, spread: 0.1, diff: 1, spin: 0.2, wander: 0.15, early: 0.15, damp: 9000, mix: 0.25, shimmer: 0 }),
-  rp("Shimmer Lex Cathedral", { type: 7, decay: 0.85, size: 1.5, predelay: 50, bass: 1.2, shape: 0.55, spread: 0.5, spin: 0.5, wander: 0.5, shift: 12, shimmer: 0.5, mix: 0.45, hp: 200, lp: 9000 }),
+  rp("Lexicat Large Hall", { type: 1, lexmix: 1, decay: 0.68, size: 1.4, predelay: 25, bass: 1.4, shape: 0.55, spread: 0.55, diff: 0.55, spin: 0.55, wander: 0.65, lexrand: 0.7, early: 0.7, damp: 5000, mix: 0.3, hp: 100, shimmer: 0 }),
+  rp("Lexicat Random Bloom", { type: 1, lexmix: 1, decay: 0.82, size: 1.5, predelay: 40, bass: 1.5, shape: 0.7, spread: 0.7, diff: 0.7, spin: 0.7, wander: 0.8, lexrand: 1, early: 0.5, damp: 4500, mix: 0.35, hp: 120, shimmer: 0 }),
+  rp("Lexicat Tight Plate Feel", { type: 1, lexmix: 1, decay: 0.3, size: 0.6, predelay: 0, bass: 1, shape: 0, spread: 0.1, diff: 1, spin: 0.3, wander: 0.2, lexrand: 0.3, early: 0.15, damp: 9000, mix: 0.25, shimmer: 0 }),
+  rp("Shimmer plus Lexicat", { type: 3, lexmix: 0.6, decay: 0.85, size: 1.5, predelay: 50, bass: 1.3, shape: 0.6, spread: 0.6, spin: 0.6, wander: 0.7, lexrand: 0.8, shift: 12, shimmer: 0.5, mix: 0.45, hp: 200, lp: 9000 }),
   rp("Trance Pluck Space", { type: 1, decay: 0.55, predelay: 80, mod: 0.4, mix: 0.3, hp: 300, lp: 9000, shimmer: 0 })
 ];
 var FACT_D = [

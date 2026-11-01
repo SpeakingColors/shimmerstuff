@@ -48,9 +48,10 @@ int main() {
         }
     }
     // 3. Stability: loud noise through all four types, then silence: output must settle and stay bounded
-    for (int t = 0; t < 8; ++t) {
+    for (int t8 = 0; t8 < 15; ++t8) {
+        const int t = t8 % 5; const float blend = t8 < 5 ? 0.0f : t8 < 10 ? 0.5f : 1.0f;
         ReverbUnit r; r.prepare(sr);
-        ReverbSettings s; s.type = ReverbType(t); s.mix = 1.0f; s.p.decay = 0.95f; s.shimmerAmount = 0.9f; s.shimmer2Amount = 1.0f; s.shimmer2Semis = 19;
+        ReverbSettings s; s.type = ReverbType(t); s.lexBlend = blend; s.mix = 1.0f; s.p.decay = 0.95f; s.shimmerAmount = 0.9f; s.shimmer2Amount = 1.0f; s.shimmer2Semis = 19;
         float peak = 0, l, rr; std::srand(1);
         for (int i = 0; i < 96000; ++i) { float n = (std::rand() / float(RAND_MAX) - 0.5f) * 2; r.process(n, n, l, rr, s); peak = std::max(peak, std::fabs(l)); }
         CHECK(std::isfinite(peak) && peak < 20.0f);
@@ -110,43 +111,62 @@ int main() {
         CHECK(diff > 0.01f);
     }
 
-    // 8. Lexicon-style reverb: Mid RT sets the decay, Bass Multiply lengthens only the lows, Shape delays the build-up, old delay settings unchanged
+    // 8. Lexicat (Lexicon-style module, lexBlend = 1): Mid RT sets the decay, Bass Multiply lengthens only the lows, Shape delays the build-up
     {
-        auto ir = [&](ReverbType t, auto tweak) {
-            ReverbUnit r; r.prepare(sr); ReverbSettings s; s.type = t; s.mix = 1.0f; s.p.preDelayMs = 0; s.p.early = 0; tweak(s);
+        auto ir = [&](float blend, ReverbType t, auto tweak) {
+            ReverbUnit r; r.prepare(sr); ReverbSettings s; s.type = t; s.lexBlend = blend; s.mix = 1.0f; s.p.preDelayMs = 0; s.p.early = 0; tweak(s);
             std::vector<float> L(4 * 96000); float rr;
             for (size_t i = 0; i < L.size(); ++i) r.process(i == 0 ? 1.0f : 0.0f, i == 0 ? 1.0f : 0.0f, L[i], rr, s);
             return L;
         };
-        // one-pole low-pass for band energy
-        auto band = [&](const std::vector<float>& x, bool low, size_t a, size_t b) {
+        auto band = [&](const std::vector<float>& x, bool low, size_t a2, size_t b2) {
             float lp = 0, k = 1.0f - std::exp(-6.2831853f * 300.0f / sr), e = 0;
-            for (size_t i = 0; i < b && i < x.size(); ++i) { lp += k * (x[i] - lp); if (i >= a) { float v = low ? lp : x[i] - lp; e += v * v; } }
+            for (size_t i = 0; i < b2 && i < x.size(); ++i) { lp += k * (x[i] - lp); if (i >= a2) { float v = low ? lp : x[i] - lp; e += v * v; } }
             return e;
         };
-        for (int t = 5; t < 8; ++t) {
-            auto a = ir(ReverbType(t), [](ReverbSettings& s) { s.p.decay = 0.4f; });
-            auto b = ir(ReverbType(t), [](ReverbSettings& s) { s.p.decay = 0.8f; });
+        for (int mv = 0; mv < 2; ++mv) {
+            auto a = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.decay = 0.4f; s.p.lexRandom = mv; });
+            auto b = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.decay = 0.8f; s.p.lexRandom = mv; });
             bool fin = true; for (float v : a) fin = fin && std::isfinite(v);
             CHECK(fin);
             CHECK(energy(a, 20000, 30000) > 1e-8f);
-            CHECK(energy(b, 100000, 120000) > 4.0f * energy(a, 100000, 120000));       // higher Mid RT = longer tail
-            CHECK(energy(b, 240000, 260000) < energy(b, 100000, 120000));              // and it still decays
-            auto n1 = ir(ReverbType(t), [](ReverbSettings& s) { s.p.decay = 0.6f; s.p.bass = 1.0f; });
-            auto n2 = ir(ReverbType(t), [](ReverbSettings& s) { s.p.decay = 0.6f; s.p.bass = 2.0f; });
+            CHECK(energy(b, 100000, 120000) > 4.0f * energy(a, 100000, 120000));
+            CHECK(energy(b, 240000, 260000) < energy(b, 100000, 120000));
+            auto n1 = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.decay = 0.6f; s.p.bass = 1.0f; s.p.lexRandom = mv; });
+            auto n2 = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.decay = 0.6f; s.p.bass = 2.0f; s.p.lexRandom = mv; });
             float lowGain = band(n2, true, 120000, 160000) / (band(n1, true, 120000, 160000) + 1e-12f);
             float hiGain = band(n2, false, 120000, 160000) / (band(n1, false, 120000, 160000) + 1e-12f);
-            CHECK(lowGain > 2.0f);                                                    // lows decay slower with Bass Multiply 2
-            CHECK(hiGain < 0.5f * lowGain);                                           // highs are left alone
-            // Shape/Spread: slow build-up puts less energy in the 30 to 150 ms window than an instant start
-            auto fast = ir(ReverbType(t), [](ReverbSettings& s) { s.p.shape = 0.0f; });
-            auto slow = ir(ReverbType(t), [](ReverbSettings& s) { s.p.shape = 1.0f; s.p.spread = 1.0f; });
+            CHECK(lowGain > 2.0f);
+            CHECK(hiGain < 0.5f * lowGain);
+            auto fast = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.shape = 0.0f; s.p.lexRandom = mv; });
+            auto slow = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.shape = 1.0f; s.p.spread = 1.0f; s.p.lexRandom = mv; });
             CHECK(energy(slow, 1400, 7200) < 0.6f * energy(fast, 1400, 7200));
-            // Early reflections add energy in the first 60 ms
-            auto e0 = ir(ReverbType(t), [](ReverbSettings& s) { s.p.early = 0.0f; });
-            auto e1 = ir(ReverbType(t), [](ReverbSettings& s) { s.p.early = 1.0f; });
+            auto e0 = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.early = 0.0f; s.p.lexRandom = mv; });
+            auto e1 = ir(1.0f, ReverbType::Hall, [&](ReverbSettings& s) { s.p.early = 1.0f; s.p.lexRandom = mv; });
             CHECK(energy(e1, 0, 2880) > energy(e0, 0, 2880));
         }
+        // blend 0 is the plain reverb, exactly; blend 0.5 differs from both ends
+        auto m0 = ir(0.0f, ReverbType::Hall, [](ReverbSettings&) {}), m5 = ir(0.5f, ReverbType::Hall, [](ReverbSettings&) {}), m1 = ir(1.0f, ReverbType::Hall, [](ReverbSettings&) {});
+        ReverbUnit plain; plain.prepare(sr); ReverbSettings sp; sp.type = ReverbType::Hall; sp.mix = 1.0f; sp.p.preDelayMs = 0; sp.p.early = 0; float pl, pr, dsum = 0;
+        for (size_t i = 0; i < 20000; ++i) { plain.process(i == 0 ? 1.0f : 0.0f, i == 0 ? 1.0f : 0.0f, pl, pr, sp); dsum += std::fabs(pl - m0[i]); }
+        CHECK(dsum == 0.0f);
+        float d05 = 0, d15 = 0; for (size_t i = 0; i < 20000; ++i) { d05 += std::fabs(m5[i] - m0[i]); d15 += std::fabs(m5[i] - m1[i]); }
+        CHECK(d05 > 0.01f && d15 > 0.01f);
+        // level match: same Decay, the Lexicat tail has about the same energy as Hall (within 3 dB)
+        float eh = energy(m0, 4000, 80000), el = energy(m1, 4000, 80000);
+        std::printf("level Lexicat vs Hall: %.1f dB\n", 10.0f * std::log10(el / eh));
+        CHECK(std::fabs(10.0f * std::log10(el / eh)) < 3.0f);
+        // smoothness of the late tail spectrum (less metallic = smaller ripple in dB), 1.0 to 1.5 s, 200 Hz to 8 kHz
+        auto ripple = [&](const std::vector<float>& x) {
+            const size_t a2 = 48000, n = 24000; std::vector<float> w(n); for (size_t i = 0; i < n; ++i) w[i] = x[a2 + i] * (0.5f - 0.5f * std::cos(6.2831853f * float(i) / float(n)));
+            std::vector<float> db; for (int k = 0; k < 160; ++k) { float f = 200.0f * std::pow(40.0f, float(k) / 159.0f); db.push_back(20.0f * std::log10(goertzel(w, f, sr) + 1e-12f)); }
+            float m = 0; for (float v : db) m += v; m /= float(db.size()); float v2 = 0; for (float v : db) v2 += (v - m) * (v - m); return std::sqrt(v2 / float(db.size()));
+        };
+        auto hallIr = ir(0.0f, ReverbType::Hall, [](ReverbSettings& s) { s.p.decay = 0.7f; s.p.modDepth = 0.0f; });
+        auto lexStill = ir(1.0f, ReverbType::Hall, [](ReverbSettings& s) { s.p.decay = 0.7f; s.p.wander = 0.0f; });
+        auto lexMove = ir(1.0f, ReverbType::Hall, [](ReverbSettings& s) { s.p.decay = 0.7f; s.p.wander = 1.0f; s.p.lexRandom = 1.0f; });
+        std::printf("tail ripple dB: Hall %.2f, Lexicat still %.2f, Lexicat moving %.2f\n", ripple(hallIr), ripple(lexStill), ripple(lexMove));
+        CHECK(ripple(lexStill) < ripple(hallIr) && ripple(lexMove) < ripple(hallIr));   // Lexicat tail is smoother (less metallic) than Hall
     }
     // 9. Delay extras off = same output as the plain delay; cross feedback moves echoes to the other channel and stays bounded
     {
