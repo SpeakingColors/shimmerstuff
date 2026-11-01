@@ -9,8 +9,8 @@ namespace ssp
 using V = std::vector<std::pair<const char*, float>>;
 struct Pre { const char* name; V v; const char* graph = nullptr; };
 
-inline const std::vector<const char*>& reverbKeys() { static const std::vector<const char*> k { "rev_on", "type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "mix" }; return k; }
-inline const std::vector<const char*>& delayKeys() { static const std::vector<const char*> k { "del_on", "dtime", "dfb", "dshift", "dshim", "ddamp", "dmix" }; return k; }
+inline const std::vector<const char*>& reverbKeys() { static const std::vector<const char*> k { "rev_on", "type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "mix", "bass", "xover", "shape", "spread", "diff", "spin", "wander", "early" }; return k; }
+inline const std::vector<const char*>& delayKeys() { static const std::vector<const char*> k { "del_on", "dtime", "dfb", "dshift", "dshim", "ddamp", "dmix", "dxfb", "dwide", "dtap2", "dratio2" }; return k; }
 inline const std::vector<const char*>& fxKeys() { static const std::vector<const char*> k { "route", "rev_on", "del_on", "ifx_on", "wfx_on", "i_hp", "i_lp", "i_drive", "i_mix", "w_drive", "w_smix", "w_depth", "w_qmix", "w_duck", "w_drel", "w_dmode", "w_dsrc", "w_dshape", "w_drate", "w_dratio", "w_width", "w_boost" }; return k; }
 
 // w_dmode: 0 follow, 1 free, 2 BPM sync. w_dsrc: 0 none, 1 plugin input, 2 sidechain. w_dratio: 0 1/16, 1 1/8, 2 1/4, 3 1/2, 4 1 bar, 5 2 bars, 6 4 bars.

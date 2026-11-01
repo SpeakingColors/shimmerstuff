@@ -191,7 +191,7 @@ void DecayView::measure()
     // the real reverb at a 16 kHz rate: a full wet impulse response, then Schroeder backward integration (energy decay curve)
     const float sr = 16000.f; wm::engine::ReverbUnit u; u.prepare(sr);
     wm::engine::ReverbSettings s;
-    s.type = (wm::engine::ReverbType) juce::jlimit(0, 4, (int) proc.get("type"));
+    s.type = (wm::engine::ReverbType) juce::jlimit(0, 7, (int) proc.get("type"));
     s.p.decay = proc.get("decay"); s.p.dampHz = proc.get("damp"); s.p.preDelayMs = proc.get("predelay"); s.p.size = proc.get("size");
     s.p.modDepth = proc.get("mod"); s.p.color = proc.get("color"); s.shimmerSemis = proc.get("shift"); s.shimmerAmount = proc.get("shimmer");
     s.shimmer2Semis = proc.get("shift2"); s.shimmer2Amount = proc.get("shimmer2"); s.wetHpHz = proc.get("hp"); s.wetLpHz = juce::jmin(proc.get("lp"), 7500.f); s.mix = 1.f;
@@ -597,7 +597,7 @@ void RouteView::paint(juce::Graphics& g)
         if (big)
         {
             juce::String sub = nodeSub(b.node);
-            if (b.node == wm::fx::kRev) sub = ShimmerstuffProcessor::typeNames()[juce::jlimit(0, 4, (int) proc.get("type"))];
+            if (b.node == wm::fx::kRev) sub = ShimmerstuffProcessor::typeNames()[juce::jlimit(0, 7, (int) proc.get("type"))];
             if (b.node == wm::fx::kDel) sub = (proc.get("dshift") > 0.4f ? "+" : "") + juce::String(juce::roundToInt(proc.get("dshift"))) + " st per repeat";
             g.setColour(col::dim); g.setFont(font(11.f, false, 0.03f)); g.drawText(sub, r.withTrimmedTop(26.f).withHeight(16.f).toNearestInt(), juce::Justification::centred);
         }

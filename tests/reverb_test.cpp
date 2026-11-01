@@ -48,7 +48,7 @@ int main() {
         }
     }
     // 3. Stability: loud noise through all four types, then silence: output must settle and stay bounded
-    for (int t = 0; t < 5; ++t) {
+    for (int t = 0; t < 8; ++t) {
         ReverbUnit r; r.prepare(sr);
         ReverbSettings s; s.type = ReverbType(t); s.mix = 1.0f; s.p.decay = 0.95f; s.shimmerAmount = 0.9f; s.shimmer2Amount = 1.0f; s.shimmer2Semis = 19;
         float peak = 0, l, rr; std::srand(1);
@@ -108,6 +108,57 @@ int main() {
         float la, lb, rr, diff = 0;
         for (int i = 0; i < 48000; ++i) { float x = i < 2400 ? std::sin(2*3.14159265f*440.0f*float(i)/sr) : 0.0f; a.process(x, x, la, rr, s); b.process(x, x, lb, rr, s2); if (i > 20000) diff += std::fabs(la - lb); }
         CHECK(diff > 0.01f);
+    }
+
+    // 8. Lexicon-style reverb: Mid RT sets the decay, Bass Multiply lengthens only the lows, Shape delays the build-up, old delay settings unchanged
+    {
+        auto ir = [&](ReverbType t, auto tweak) {
+            ReverbUnit r; r.prepare(sr); ReverbSettings s; s.type = t; s.mix = 1.0f; s.p.preDelayMs = 0; s.p.early = 0; tweak(s);
+            std::vector<float> L(4 * 96000); float rr;
+            for (size_t i = 0; i < L.size(); ++i) r.process(i == 0 ? 1.0f : 0.0f, i == 0 ? 1.0f : 0.0f, L[i], rr, s);
+            return L;
+        };
+        // one-pole low-pass for band energy
+        auto band = [&](const std::vector<float>& x, bool low, size_t a, size_t b) {
+            float lp = 0, k = 1.0f - std::exp(-6.2831853f * 300.0f / sr), e = 0;
+            for (size_t i = 0; i < b && i < x.size(); ++i) { lp += k * (x[i] - lp); if (i >= a) { float v = low ? lp : x[i] - lp; e += v * v; } }
+            return e;
+        };
+        for (int t = 5; t < 8; ++t) {
+            auto a = ir(ReverbType(t), [](ReverbSettings& s) { s.p.decay = 0.4f; });
+            auto b = ir(ReverbType(t), [](ReverbSettings& s) { s.p.decay = 0.8f; });
+            bool fin = true; for (float v : a) fin = fin && std::isfinite(v);
+            CHECK(fin);
+            CHECK(energy(a, 20000, 30000) > 1e-8f);
+            CHECK(energy(b, 100000, 120000) > 4.0f * energy(a, 100000, 120000));       // higher Mid RT = longer tail
+            CHECK(energy(b, 240000, 260000) < energy(b, 100000, 120000));              // and it still decays
+            auto n1 = ir(ReverbType(t), [](ReverbSettings& s) { s.p.decay = 0.6f; s.p.bass = 1.0f; });
+            auto n2 = ir(ReverbType(t), [](ReverbSettings& s) { s.p.decay = 0.6f; s.p.bass = 2.0f; });
+            float lowGain = band(n2, true, 120000, 160000) / (band(n1, true, 120000, 160000) + 1e-12f);
+            float hiGain = band(n2, false, 120000, 160000) / (band(n1, false, 120000, 160000) + 1e-12f);
+            CHECK(lowGain > 2.0f);                                                    // lows decay slower with Bass Multiply 2
+            CHECK(hiGain < 0.5f * lowGain);                                           // highs are left alone
+            // Shape/Spread: slow build-up puts less energy in the 30 to 150 ms window than an instant start
+            auto fast = ir(ReverbType(t), [](ReverbSettings& s) { s.p.shape = 0.0f; });
+            auto slow = ir(ReverbType(t), [](ReverbSettings& s) { s.p.shape = 1.0f; s.p.spread = 1.0f; });
+            CHECK(energy(slow, 1400, 7200) < 0.6f * energy(fast, 1400, 7200));
+            // Early reflections add energy in the first 60 ms
+            auto e0 = ir(ReverbType(t), [](ReverbSettings& s) { s.p.early = 0.0f; });
+            auto e1 = ir(ReverbType(t), [](ReverbSettings& s) { s.p.early = 1.0f; });
+            CHECK(energy(e1, 0, 2880) > energy(e0, 0, 2880));
+        }
+    }
+    // 9. Delay extras off = same output as the plain delay; cross feedback moves echoes to the other channel and stays bounded
+    {
+        ShimmerDelay a, b; a.prepare(sr); b.prepare(sr); ShimmerDelayParams p0, p1; p0.mix = p1.mix = 1.0f; p1.crossFb = 0.0f; p1.wide = 0.0f; p1.tap2 = 0.0f;
+        float la, lb, ra, rb, diff = 0;
+        for (int i = 0; i < 48000; ++i) { float x = i < 2400 ? std::sin(0.05f * float(i)) : 0.0f; a.process(x, x, la, ra, p0); b.process(x, x, lb, rb, p1); diff += std::fabs(la - lb) + std::fabs(ra - rb); }
+        CHECK(diff == 0.0f);
+        ShimmerDelay c; c.prepare(sr); ShimmerDelayParams pc; pc.mix = 1.0f; pc.timeMs = 100; pc.feedback = 0.9f; pc.shimmerAmount = 0.0f; pc.crossFb = 1.0f; pc.tap2 = 0.7f; pc.wide = 0.3f;
+        float eL = 0, eR = 0, lc, rc, pk = 0;
+        for (int i = 0; i < 96000; ++i) { float x = i == 0 ? 1.0f : 0.0f; c.process(x, 0.0f, lc, rc, pc); if (i > 2000) { eL += lc * lc; eR += rc * rc; } pk = std::max(pk, std::max(std::fabs(lc), std::fabs(rc))); }
+        CHECK(std::isfinite(pk) && pk < 4.0f);
+        CHECK(eR > 0.05f * eL);                                                       // the echo reaches the right channel although only the left was fed
     }
     if (!fails) std::puts("reverb_test: all passed");
     return fails ? 1 : 0;

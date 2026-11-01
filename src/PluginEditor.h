@@ -65,7 +65,7 @@ public:
     void mouseDoubleClick(const juce::MouseEvent&) override;
     void tick();
     float rt60Seconds() const;
-    bool shimmerOn() const { return (int) proc.get("type") >= 2; }
+    bool shimmerOn() const { const int t = (int) proc.get("type"); return t == 2 || t == 3 || t == 7; }
 private:
     void measure();
     juce::Rectangle<float> plot() const;
