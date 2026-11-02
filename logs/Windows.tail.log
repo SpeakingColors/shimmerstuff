@@ -32,7 +32,7 @@ Call Stack (most recent call first):
 -- Looking for pthread_create in pthread
 -- Looking for pthread_create in pthread - not found
 -- Found Threads: TRUE
--- Configuring done (134.8s)
+-- Configuring done (158.3s)
 -- Generating done (0.2s)
 CMake Warning (unused-cli):
   Manually-specified variables were not used by the project:
@@ -55,7 +55,7 @@ MSBuild version 18.11.1-1.26513.3+940033be3 for .NET Framework
   -- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/cl.exe - skipped
   -- Detecting CXX compile features
   -- Detecting CXX compile features - done
-  -- Configuring done (2.3s)
+  -- Configuring done (2.1s)
   -- Generating done (0.0s)
   -- Build files have been written to: D:/a/shimmerstuff/shimmerstuff/build/vst3_helpers/Shimmerstuff
   MSBuild version 18.11.1-1.26513.3+940033be3 for .NET Framework
