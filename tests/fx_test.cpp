@@ -63,6 +63,14 @@ int main() {
         std::printf("modulation ok\n");
     }
 
+    // wet limiter: with it on a loud boosted signal stays under 1.0, a quiet one passes untouched, with it off nothing changes
+    { double pkOn = 0, pkOff = 0, dq = 0;
+      for (int w = 0; w < 3; ++w) { WetFx f; f.prepare(48000); WetParams p; p.boostDb = w == 2 ? 0.f : 12.f; p.limit = w == 0; p.satDrive = 1; float mx = 0;
+        for (int i = 0; i < 48000; ++i) { const float x = (w == 2 ? 0.2f : 0.9f) * std::sin(0.07f * float(i)); f.process(x, x, 0, 0, p); if (i > 2000) { mx = std::max(mx, std::fabs(f.oL)); if (w == 2) dq = std::max(dq, (double) std::fabs(f.oL - x)); } }
+        if (w < 2) (w == 0 ? pkOn : pkOff) = mx; }
+      CHECK(pkOn < 1.0 && pkOff > 2.0); std::printf("  limiter: on %.3f, off %.3f\n", pkOn, pkOff); }
+    { WetFx f; f.prepare(48000); WetParams p; p.limit = true; p.satDrive = 1; double d = 0; for (int i = 0; i < 48000; ++i) { const float x = 0.3f * std::sin(0.05f * float(i)); f.process(x, x, 0, 0, p); if (i > 100) d = std::max(d, (double) std::fabs(f.oL - x)); } CHECK(d < 1e-4); }
+
     // everything off passes the input untouched
     { Engine e; e.prepare(48000); e.revOn = e.delOn = e.ifxOn = e.wfxOn = false; const Graph g = parseGraph("ifx>rev>del>wfx"); float ol, orr; e.tick(g, 0.3f, -0.2f, 0.3f, -0.2f, ol, orr); CHECK(ol == 0.3f && orr == -0.2f); }
 

@@ -77,7 +77,7 @@ private:
     float signature() const;
     ShimmerstuffProcessor& proc;
     std::vector<float> edc;
-    float lastSig = -1.f; int stable = 0; bool dirty = true;
+    float lastSig = -1.f; int stable = 0; bool dirty = true; int pk = 0;
     int drag = -1; float startA = 0, startB = 0; juce::Point<float> startPos, startHandle, curPos;
     static constexpr int kPts = 240; static constexpr float kSeconds = 12.f;
 };
@@ -220,8 +220,8 @@ private:
     DecayView decay; ToneView toneRev, toneDel, toneFx, toneMod; ModView modv; EchoView echo; RouteView route; ShapeView shape; LevelMeter meter;
     Combo rType, rMode, lay, dMode, dSrc, dRatio, dType, mType;
     Knob rk[24], dk[21], ik[4], wk[6], dukn[3], mk[15], mMix, mLevel;
-    juce::TextButton shimTog { "SHIMMER ON" }, onBtn[5], revOn { "ON" }, delOn { "ON" }, holdTog { "HOLD" }, modOn { "ON" }, chip[8];
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aOn[5], aRev, aDel, aShim, aHold, aModOn, aChip[8];
+    juce::TextButton shimTog { "SHIMMER ON" }, onBtn[5], revOn { "ON" }, delOn { "ON" }, holdTog { "HOLD" }, limTog { "LIMITER" }, modOn { "ON" }, chip[8];
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aOn[5], aRev, aDel, aShim, aHold, aLim, aModOn, aChip[8];
     void syncEdit();                 // Modulation tab: aim the knobs at the effect chosen in "Edit effect"
     int shownEdit = -1;
     int slow = 0;

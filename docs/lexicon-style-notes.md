@@ -49,5 +49,7 @@ Labels: **VERIFIED** (read in a primary document), **COMMUNITY** (forum or insid
 - Modulation is a fifth routing box with eight effects (Chorus, Flanger, Phaser, Tremolo, Pan, Rotary, Vibrato, Detune) that can all run together in a fixed order; each keeps its own settings; Mix and Level are global.
 - Default routing: Input FX, then Reverb, Delay and Modulation side by side, then Wet FX.
 - Level knobs (-12 to +12 dB, wet only) on reverb, delay and modulation. Reason: parallel boxes are averaged (each wet divided by the number of boxes, about -9.5 dB for three), so the reverb sat low in the mix.
-- Optional idea, not built: a soft limiter at the very end of the Wet FX box (effect signal only).
+- Wet limiter: on/off toggle (default off) at the very end of the Wet FX box, effect signal only: fast linked limiter at -1 dBFS plus a soft knee above 0.9; quiet signals pass untouched (tested).
+- Level match: Room +3.4 dB, Chamber +1.1 dB, Arena +2.3 dB so they sit with Hall (measured on noise).
+- Decay view: Reverse now shows its energy envelope (swell then fall) and the view measures all nine types (it used to treat types above Velvet as Hall or Plate).
 - Old saves load: new parameters default to the old behaviour, missing boxes are appended to the routing.

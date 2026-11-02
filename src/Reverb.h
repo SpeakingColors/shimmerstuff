@@ -532,9 +532,9 @@ public:
             switch (s.type) {
                 case ReverbType::Plate: plate_.process(fl, fr, wl, wr, s.p); break;
                 case ReverbType::Velvet: velvet_.process(fl, fr, wl, wr, s.p); break;
-                case ReverbType::Room: pp.size = s.p.size * 0.28f; pp.decay = s.p.decay * 0.6f; pp.modDepth = s.p.modDepth * 0.4f; hall_.process(fl, fr, wl, wr, pp); wl *= 0.6f; wr *= 0.6f; break;
-                case ReverbType::Chamber: pp.size = s.p.size * 0.55f; pp.decay = s.p.decay * 0.85f; pp.dampHz = s.p.dampHz * 0.9f; hall_.process(fl, fr, wl, wr, pp); wl *= 0.83f; wr *= 0.83f; break;
-                case ReverbType::Arena: pp.size = s.p.size * 1.6f; pp.decay = 0.35f + 0.65f * s.p.decay; pp.dampHz = s.p.dampHz * 0.55f; hall_.process(fl, fr, wl, wr, pp); break;
+                case ReverbType::Room: pp.size = s.p.size * 0.28f; pp.decay = s.p.decay * 0.6f; pp.modDepth = s.p.modDepth * 0.4f; hall_.process(fl, fr, wl, wr, pp); wl *= 0.89f; wr *= 0.89f; break;
+                case ReverbType::Chamber: pp.size = s.p.size * 0.55f; pp.decay = s.p.decay * 0.85f; pp.dampHz = s.p.dampHz * 0.9f; hall_.process(fl, fr, wl, wr, pp); wl *= 0.94f; wr *= 0.94f; break;
+                case ReverbType::Arena: pp.size = s.p.size * 1.6f; pp.decay = 0.35f + 0.65f * s.p.decay; pp.dampHz = s.p.dampHz * 0.55f; hall_.process(fl, fr, wl, wr, pp); wl *= 1.3f; wr *= 1.3f; break;
                 case ReverbType::Spring: spring_.process(fl, fr, wl, wr, s.p); break;
                 case ReverbType::Gated: {
                     plate_.process(fl, fr, wl, wr, s.p);

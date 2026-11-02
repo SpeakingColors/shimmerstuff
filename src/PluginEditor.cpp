@@ -204,22 +204,30 @@ void DecayView::measure()
     // the real reverb at a 16 kHz rate: a full wet impulse response, then Schroeder backward integration (energy decay curve)
     const float sr = 16000.f; wm::engine::ReverbUnit u; u.prepare(sr);
     wm::engine::ReverbSettings s;
-    s.type = (wm::engine::ReverbType) juce::jlimit(0, 2, (int) proc.get("type")); s.shimmer = proc.get("shim_on") > .5f; s.lexBlend = proc.get("lexmix"); s.p.lexMode = juce::jlimit(0, 4, (int) proc.get("lexmode"));
+    s.type = (wm::engine::ReverbType) juce::jlimit(0, 8, (int) proc.get("type")); s.p.special = proc.get("rspec"); s.shimmer = proc.get("shim_on") > .5f; s.lexBlend = proc.get("lexmix"); s.p.lexMode = juce::jlimit(0, 4, (int) proc.get("lexmode"));
     s.p.decay = proc.get("decay"); s.p.dampHz = proc.get("damp"); s.p.preDelayMs = proc.get("predelay"); s.p.size = proc.get("size");
     s.p.modDepth = proc.get("mod"); s.p.color = proc.get("color"); s.shimmerSemis = proc.get("shift"); s.shimmerAmount = proc.get("shimmer");
     s.shimmer2Semis = proc.get("shift2"); s.shimmer2Amount = proc.get("shimmer2"); s.wetHpHz = proc.get("hp"); s.wetLpHz = juce::jmin(proc.get("lp"), 7500.f); s.mix = 1.f;
     const int N = (int) (kSeconds * sr); std::vector<double> e((size_t) N);
     for (int i = 0; i < N; ++i) { float ol, orr; const float in = i == 0 ? 1.f : 0.f; u.process(in, in, ol, orr, s); e[(size_t) i] = 0.5 * ((double) ol * ol + (double) orr * orr); }
     double total = 0; for (double v : e) total += v;
-    edc.assign((size_t) kPts, -80.f);
+    edc.assign((size_t) kPts, -80.f); pk = 0;
     if (total <= 1e-20) return;
+    if ((int) proc.get("type") == 8)      // Reverse swells up and then falls: show the energy envelope instead of the (always falling) decay curve
+    {
+        std::vector<double> bins((size_t) kPts, 0.0); double mx = 1e-30;
+        for (int i = 0; i < N; ++i) bins[(size_t) juce::jmin(kPts - 1, i * kPts / N)] += e[(size_t) i];
+        for (double b : bins) mx = juce::jmax(mx, b);
+        for (int k = 0; k < kPts; ++k) { edc[(size_t) k] = juce::jlimit(-80.f, 0.f, (float) (10.0 * std::log10(bins[(size_t) k] / mx + 1e-12))); if (edc[(size_t) k] > edc[(size_t) pk]) pk = k; }
+        return;
+    }
     std::vector<double> back((size_t) N + 1, 0.0);
     for (int i = N - 1; i >= 0; --i) back[(size_t) i] = back[(size_t) i + 1] + e[(size_t) i];
     for (int k = 0; k < kPts; ++k) { const int i = juce::jmin(N - 1, k * N / kPts); edc[(size_t) k] = juce::jlimit(-80.f, 0.f, (float) (10.0 * std::log10(back[(size_t) i] / total + 1e-12))); }
 }
 float DecayView::rt60Seconds() const
 {
-    for (size_t k = 0; k < edc.size(); ++k) if (edc[k] <= -60.f) return (float) k / (float) (kPts - 1) * kSeconds;
+    for (size_t k = (size_t) pk; k < edc.size(); ++k) if (edc[k] <= -60.f) return (float) k / (float) (kPts - 1) * kSeconds;
     return kSeconds;
 }
 juce::Rectangle<float> DecayView::plot() const { return { 52.f, 16.f, (float) getWidth() - 52.f - 52.f, (float) getHeight() - 16.f - 30.f }; }
@@ -887,6 +895,9 @@ Body::Body(ShimmerstuffProcessor& p)
     holdTog.setClickingTogglesState(true); addAndMakeVisible(holdTog); holdTog.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff0f2a26)); holdTog.setColour(juce::TextButton::textColourOnId, col::mint);
     holdTog.setTooltip("Hold: freezes the repeats so they loop forever. Release it and the delay carries on as before.");
     aHold = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(a, "dhold", holdTog);
+    limTog.setClickingTogglesState(true); addAndMakeVisible(limTog); limTog.setColour(juce::TextButton::buttonOnColourId, col::sel); limTog.setColour(juce::TextButton::textColourOnId, col::yellow);
+    limTog.setTooltip("Limiter: a quiet safety limiter at the very end of the Wet FX box, on the effect signal only. You will not hear it until the effect gets close to 0 dB; it lets you push Level and Wet boost without clipping.");
+    aLim = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(a, "w_lim", limTog);
 
     // modulation tab: the knobs follow the effect chosen in "Edit effect"
     mType.init(*this, a, "m_type", "Edit effect", juce::StringArray { "Chorus", "Flanger", "Phaser", "Tremolo", "Pan", "Rotary", "Vibrato", "Detune" }, "Which effect the knobs on this tab edit. Every effect keeps its own settings; switch them on in Active effects to use them together.");
@@ -1154,7 +1165,7 @@ void Body::layoutTab()
     for (auto& k : mk) k.setVisible(false);
     mMix.setVisible(false); mLevel.setVisible(false);
     for (auto* c : { &rType, &rMode, &lay, &dMode, &dSrc, &dRatio, &dType, &mType }) c->setVisible(false);
-    shimTog.setVisible(false); holdTog.setVisible(false); modOn.setVisible(false);
+    shimTog.setVisible(false); holdTog.setVisible(false); limTog.setVisible(false); modOn.setVisible(false);
     for (auto& b : chip) b.setVisible(false);
     for (auto& b : onBtn) b.setVisible(false);
     revOn.setVisible(false); delOn.setVisible(false);
@@ -1227,7 +1238,7 @@ void Body::layoutTab()
         for (int i = 0; i < 3; ++i) place(ik[i], ix + i * cw, r1y + 32, cw, 76);
         place(ik[3], ix, r1y + 112, cw, 76);
         for (int i = 0; i < 3; ++i) place(wk[i], wx + i * cw, r1y + 32, cw, 76);
-        place(wk[3], wx, r1y + 112, cw, 76);
+        place(wk[3], wx, r1y + 112, cw, 76); place(limTog, wx + cw + 14, r1y + 130, 110, 34);
         place(wk[4], L + 8, r2y + 34, 100, 76); place(wk[5], L + 8 + 100, r2y + 34, 100, 76);
         const int dx = L + w3 + 8;
         place(dMode, dx + 14, r2y + 30, 210, 40); place(dSrc, dx + 14, r2y + 74, 210, 40);

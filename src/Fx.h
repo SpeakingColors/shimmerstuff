@@ -99,7 +99,7 @@ private:
     float sr_ = 48000, env_ = 0, ph_ = 1, gs_ = 1; bool armed_ = true; int cool_ = 0;
 };
 
-struct WetParams { float satDrive = 8, satMix = 0, squashDepth = 0.6f, squashMix = 0, width = 1, boostDb = 0; DuckParams duck; };
+struct WetParams { float satDrive = 8, satMix = 0, squashDepth = 0.6f, squashMix = 0, width = 1, boostDb = 0; bool limit = false; DuckParams duck; };
 class WetFx {
 public:
     void prepare(float sr) { sr_ = sr; ad_ = Adaa(); l1_ = OnePole(); l2_ = OnePole(); for (auto& e : env_) e[0] = e[1] = 0; duck_.prepare(sr); }
@@ -115,10 +115,21 @@ public:
         const float m = 0.5f * (w[0] + w[1]), sd = 0.5f * (w[0] - w[1]) * p.width; w[0] = m + sd; w[1] = m - sd;
         const float dg = duck_.tick(dl, dr, p.duck), bg = std::pow(10.f, p.boostDb / 20.f);
         oL = w[0] * dg * bg; oR = w[1] * dg * bg;
+        if (p.limit) limiter(oL, oR); else limG_ = 1.f;
     }
     float oL = 0, oR = 0, gdb[3] = {0, 0, 0};
     const Duck& duck() const { return duck_; }
 private:
+    // Safety limiter at the very end of the wet chain (effect signal only): a fast stereo-linked gain limiter at -1 dBFS (0.3 ms attack, 120 ms release),
+    // then a soft knee that only bends peaks above 0.9, so normal levels pass untouched. Off by default.
+    void limiter(float& l, float& r) {
+        const float pk = std::max(std::fabs(l), std::fabs(r)), thr = 0.891f, tgt = pk > thr ? thr / pk : 1.f;
+        const float a = tgt < limG_ ? 1.f - std::exp(-1.f / (0.0003f * sr_)) : 1.f - std::exp(-1.f / (0.12f * sr_));
+        limG_ += a * (tgt - limG_); l *= limG_; r *= limG_;
+        auto soft = [](float x) { const float ax = std::fabs(x); if (ax <= 0.9f) return x; const float y = 0.9f + 0.1f * std::tanh((ax - 0.9f) / 0.1f); return x < 0.f ? -y : y; };
+        l = soft(l); r = soft(r);
+    }
+    float limG_ = 1.f;
     float squash(int c, float x, float depth) {
         const float k1 = 1.f - std::exp(-6.2831853f * 130.f / sr_), k2 = 1.f - std::exp(-6.2831853f * 2800.f / sr_);
         const float lo = l1_.lp(c, x, k1), m2 = l2_.lp(c, x, k2), bands[3] = {lo, m2 - lo, x - m2};

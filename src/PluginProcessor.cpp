@@ -105,7 +105,7 @@ APVTS::ParameterLayout ShimmerstuffProcessor::layout()
             else { juce::NormalisableRange<float> r(m.lo, m.hi); if (m.mid > 0.f) r.setSkewForCentre(m.mid); p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{ id, 1 }, nm, r, modDefault(t, k))); }
         }
     }
-    static const B bools[] = { { "rev_on", "Reverb on", true }, { "del_on", "Delay on", false }, { "ifx_on", "Input FX on", true }, { "wfx_on", "Wet FX on", true }, { "mod_on", "Modulation on", false }, { "dhold", "Delay hold", false }, { "byp", "Bypass", false } };
+    static const B bools[] = { { "rev_on", "Reverb on", true }, { "del_on", "Delay on", false }, { "ifx_on", "Input FX on", true }, { "wfx_on", "Wet FX on", true }, { "mod_on", "Modulation on", false }, { "dhold", "Delay hold", false }, { "w_lim", "Wet limiter", false }, { "byp", "Bypass", false } };
     for (const auto& b : bools)
         p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{ b.id, 1 }, b.name, b.def));
     return { p.begin(), p.end() };
@@ -289,7 +289,7 @@ void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::Mi
     }
     dp.crossFb = get("dxfb"); dp.wide = get("dwide"); dp.tap2 = get("dtap2"); dp.tap2Ratio = get("dratio2");
     eng.ip.hp = get("i_hp"); eng.ip.lp = get("i_lp"); eng.ip.drive = get("i_drive");
-    auto& wp = eng.wp; wp.satDrive = get("w_drive"); wp.squashDepth = get("w_depth");
+    auto& wp = eng.wp; wp.limit = get("w_lim") > .5f; wp.satDrive = get("w_drive"); wp.squashDepth = get("w_depth");
     auto& dk = wp.duck; dk.relMs = get("w_drel"); dk.rateHz = get("w_drate"); dk.mode = juce::jlimit(0, 2, (int) get("w_dmode")); dk.shape = (int) get("w_dshape");
     dk.beats = kRatioBeats[juce::jlimit(0, 6, (int) get("w_dratio"))];
     double bpm = 120.0;
