@@ -203,6 +203,54 @@ int main() {
         for (int i = 0; i < 192000; ++i) { float x = i < 2400 ? std::sin(0.05f * float(i)) : 0.0f; a.process(x, x, la, ra, p0); b.process(x, x, lb, rb, p1); diff += std::fabs(la - lb); pk2 = std::max(pk2, std::max(std::fabs(lb), std::fabs(rb))); }
         CHECK(diff > 1.0f && std::isfinite(pk2) && pk2 < 4.0f);                 // voices change the echo and stay bounded
     }
+    // 11. New reverb types: stable, level matched to Hall, special control does something, gate cuts, reverse swells
+    {
+        auto run = [&](ReverbType t, float special, float& peak, float& late) {
+            ReverbUnit r; r.prepare(sr); ReverbSettings s; s.type = t; s.shimmer = false; s.mix = 1.0f; s.p.decay = 0.6f; s.p.special = special;
+            float l, rr, e = 0; peak = 0; late = 0;
+            for (int i = 0; i < 48000 * 6; ++i) { float x = i < 2400 ? std::sin(0.07f * float(i)) * 0.5f : 0.0f; r.process(x, x, l, rr, s); if (!std::isfinite(l) || !std::isfinite(rr)) { peak = 1e9f; break; } peak = std::max(peak, std::fabs(l)); e += l * l; if (i > 48000 * 2) late += l * l; }
+            return e;
+        };
+        float pk, lt; const float eHall = run(ReverbType::Hall, 0.5f, pk, lt);
+        for (int t = 3; t < 9; ++t) {
+            const float e = run(ReverbType(t), 0.5f, pk, lt);
+            CHECK(pk < 4.0f && e > 0.0f);
+            CHECK(std::fabs(10.0f * std::log10(e / eHall)) < 5.0f);              // within 5 dB of Hall
+        }
+        {   // Spring: boing changes the waveform (allpass chirp keeps the energy, so compare samples)
+            auto wave = [&](float special) { ReverbUnit r; r.prepare(sr); ReverbSettings s; s.type = ReverbType::Spring; s.shimmer = false; s.mix = 1.0f; s.p.special = special; std::vector<float> o; float l, rr;
+                for (int i = 0; i < 24000; ++i) { float x = i < 100 ? std::sin(0.3f * float(i)) : 0.0f; r.process(x, x, l, rr, s); o.push_back(l); } return o; };
+            const auto w1 = wave(0.1f), w2 = wave(0.9f); float dd = 0, ee = 0; for (size_t i = 0; i < w1.size(); ++i) { dd += std::fabs(w1[i] - w2[i]); ee += std::fabs(w1[i]); }
+            CHECK(dd > 0.2f * ee);
+        }
+        float gl1, gl2; run(ReverbType::Gated, 0.0f, pk, gl1); run(ReverbType::Gated, 1.0f, pk, gl2);
+        CHECK(gl1 < 1e-6f);                                                      // hold 40 ms: nothing left after 2 s
+        float rl; const float eRev = run(ReverbType::Reverse, 0.5f, pk, rl), eNorm = run(ReverbType::Hall, 0.5f, pk, lt); CHECK(std::fabs(eRev - eNorm) > 0.01f * eNorm);
+        std::printf("new reverb types ok, Hall %.2f\n", eHall);
+    }
+    // 12. Delay types: Studio default unchanged, others finite and different, Hold keeps repeats, ducker dips, Pong alternates sides
+    {
+        auto runD = [&](ShimmerDelayParams p, int n, std::vector<float>* L, std::vector<float>* R) {
+            ShimmerDelay d; d.prepare(sr); float l, r, pk = 0;
+            for (int i = 0; i < n; ++i) { float x = i < 200 ? std::sin(0.05f * float(i)) : 0.0f; d.process(x, x, l, r, p); if (!std::isfinite(l) || !std::isfinite(r)) return 1e9f; pk = std::max(pk, std::max(std::fabs(l), std::fabs(r))); if (L) { L->push_back(l); R->push_back(r); } }
+            return pk;
+        };
+        ShimmerDelayParams b; b.mix = 1.0f; b.timeMs = 200; b.feedback = 0.6f; b.shimmerAmount = 0.0f;
+        std::vector<float> base, baseR; runD(b, 96000, &base, &baseR);
+        for (int t = 1; t < 5; ++t) { ShimmerDelayParams q = b; q.type = t; q.modDepth = 0.6f; std::vector<float> a, ar; const float pk = runD(q, 96000, &a, &ar); CHECK(pk < 4.0f && pk > 0.01f); float dd = 0; for (size_t i = 0; i < a.size(); ++i) dd += std::fabs(a[i] - base[i]); CHECK(dd > 1.0f); }
+        { ShimmerDelayParams q = b; q.type = 2; std::vector<float> a, ar; runD(q, 96000, &a, &ar);
+          const float e1l = energy(a, 9000, 11000), e1r = energy(ar, 9000, 11000), e2l = energy(a, 19000, 21000), e2r = energy(ar, 19000, 21000);
+          CHECK(e1l > 10.0f * e1r && e2r > 10.0f * e2l); }                      // first echo left, second echo right
+        {   // Hold: after the input has gone in, the repeats keep looping
+            auto tailE = [&](bool useHold) { ShimmerDelay d; d.prepare(sr); ShimmerDelayParams q = b; q.dampHz = 3000; float l, r, e = 0;
+                for (int i = 0; i < 48000 * 6; ++i) { float x = i < 200 ? std::sin(0.05f * float(i)) : 0.0f; q.hold = useHold && i > 3000; d.process(x, x, l, r, q); if (i > 48000 * 5) e += l * l; } return e; };
+            CHECK(tailE(false) < 1e-4f && tailE(true) > 0.001f);
+        }
+        { ShimmerDelay d; d.prepare(sr); ShimmerDelayParams q = b; q.duck = 1.0f; q.duckThr = 0.2f; ShimmerDelay e2; e2.prepare(sr); ShimmerDelayParams q0 = b; float l, r, la, ra, eD = 0, eN = 0;
+          for (int i = 0; i < 48000; ++i) { float x = 0.5f * std::sin(0.05f * float(i)); d.process(x, x, l, r, q); e2.process(x, x, la, ra, q0); if (i > 20000) { eD += l * l; eN += la * la; } }
+          CHECK(eD < 0.25f * eN); }                                              // ducker dips the repeats while the input plays
+        std::printf("delay types ok\n");
+    }
     if (!fails) std::puts("reverb_test: all passed");
     return fails ? 1 : 0;
 }

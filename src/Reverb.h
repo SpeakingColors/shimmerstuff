@@ -51,6 +51,7 @@ struct ReverbParams {
     float size = 1.0f;       // hall/room scale
     float modDepth = 0.5f;   // 0..1
     float color = 0.0f;      // -1 dark .. +1 bright (Velvet only)
+    float special = 0.5f;    // 0..1: Gated = hold time, Reverse = window length, Spring = boing; unused by the other types
     // Lexicon-style controls, used by the Lex types only (see docs/lexicon-style-notes.md).
     float bass = 1.0f;       // low-frequency reverb time as a multiple of the mid reverb time
     float xoverHz = 500.0f;  // where the bass multiply takes over from the mid time
@@ -313,6 +314,15 @@ struct ShimmerDelayParams {
     float wander = 0.0f;     // 0..1: how far the voices drift in time
     float spin = 0.5f;       // 0..1: how fast they drift
     float diffusion = 0.0f;  // 0..1: smears the input so clicks turn into swishes
+    // Delay types and extras (all off at their defaults, so older settings sound the same):
+    int type = 0;            // 0 Studio, 1 Tape (wow, flutter, smear), 2 Pong (repeats ping-pong), 3 Modulated (chorused repeats), 4 Reverse
+    bool hold = false;       // repeats loop forever, no new input
+    float duck = 0.0f;       // 0..1: how far the repeats dip (up to 18 dB) while the input plays
+    float duckThr = 0.3f;    // 0..1: how loud the input must be before the dip starts
+    float smear = 0.0f;      // 0..1: each repeat loses highs (tape style)
+    float modDepth = 0.0f;   // 0..1: depth of Tape wow or Modulated chorus
+    float modRate = 0.8f;    // Hz: speed of that movement
+    float level = 1.0f;      // gain of the repeats only (linear)
 };
 
 class ShimmerDelay {
@@ -323,24 +333,61 @@ public:
         reset();
     }
     void reset() {
-        for (int c = 0; c < 2; ++c) { dl_[c].clear(); ps_[c].reset(); lp_[c] = 0; for (auto& a : dif_[c]) a.clear(); }
+        for (int c = 0; c < 2; ++c) { dl_[c].clear(); ps_[c].reset(); lp_[c] = 0; sm_[c] = 0; for (auto& a : dif_[c]) a.clear(); }
+        lfo_[0] = lfo_[1] = revPh_ = duckEnv_ = duckG_ = 0;
         for (int k = 0; k < kMaxV; ++k) { rng_[k] = 0x9E3779B9u * unsigned(k + 3); ph_[k] = float(k) / kMaxV; a_[k] = rnd(k); b_[k] = rnd(k); }
     }
     void process(float inL, float inR, float& outL, float& outR, const ShimmerDelayParams& p) {
-        float ratio = std::pow(2.0f, p.shiftSemis / 12.0f), damp = std::exp(-2.0f * 3.14159265f * p.dampHz / sr_);
-        float in[2] = {inL, inR}, out[2], fb[2], d2[2] = {0, 0}, dv[2] = {0, 0};
-        const float maxD = float(dl_[0].capacity()) - 4.0f;
+        const float twoPi = 6.2831853f;
+        float ratio = std::pow(2.0f, p.shiftSemis / 12.0f), damp = p.hold ? 0.0f : std::exp(-twoPi * p.dampHz / sr_);
+        const float dry[2] = {inL, inR};
+        float in[2] = {inL, inR}, out[2], fb[2], d2[2] = {0, 0}, dv[2] = {0, 0}, mt[2] = {0, 0};
+        const bool tape = p.type == 1, pong = p.type == 2, chor = p.type == 3, rev = p.type == 4;
+        if (pong) { const float m = 0.5f * (inL + inR); in[0] = m; in[1] = 0; }
+        if (p.hold) in[0] = in[1] = 0;
+        const float xf = pong ? 1.0f : p.crossFb, feedback = p.hold ? 1.0f : p.feedback;
+        // ducker: the repeats dip while the input plays
+        float dg = 1.0f;
+        {
+            const float a = std::max(std::fabs(inL), std::fabs(inR));
+            duckEnv_ += (a > duckEnv_ ? 1.0f - std::exp(-1.0f / (0.002f * sr_)) : 1.0f - std::exp(-1.0f / (0.12f * sr_))) * (a - duckEnv_);
+            if (p.duck > 0.0005f) {
+                const float thr = 0.01f + 0.4f * p.duckThr * p.duckThr, open = duckEnv_ > thr ? 1.0f : 0.0f;
+                duckG_ += (open > duckG_ ? 1.0f - std::exp(-1.0f / (0.01f * sr_)) : 1.0f - std::exp(-1.0f / (0.25f * sr_))) * (open - duckG_);
+                dg = std::pow(10.0f, -18.0f * std::min(1.0f, p.duck) * duckG_ / 20.0f);
+            } else duckG_ = 0;
+        }
+        // time movement: Tape wow and flutter, Modulated chorus
+        if (tape || chor) {
+            lfo_[0] += (tape ? 0.6f * p.modRate : p.modRate) / sr_; lfo_[1] += 6.5f / sr_;
+            for (float& v : lfo_) v -= std::floor(v);
+            for (int c = 0; c < 2; ++c) {
+                if (tape) { const float depth = 0.3f + 0.7f * p.modDepth; mt[c] = (std::sin(twoPi * lfo_[0]) * 0.0012f + std::sin(twoPi * (lfo_[1] + 0.3f * float(c))) * 0.00025f) * sr_ * depth; }
+                else mt[c] = std::sin(twoPi * (lfo_[0] + 0.25f * float(c))) * p.modDepth * 0.006f * sr_;
+            }
+        }
+        const float smearEff = tape ? std::max(p.smear, 0.3f) : p.smear;
+        const float ks = 1.0f - std::exp(-twoPi * (14000.0f * (1.0f - smearEff) + 1800.0f * smearEff) / sr_);
         const int nv = std::max(1, std::min(kMaxV, p.voices));
         const float wanderS = p.wander * 0.006f * sr_;                       // up to 6 ms of drift
         const float spinHz = 0.05f + 1.2f * p.spin;
         if (nv > 1 || p.wander > 0.0f) for (int k = 0; k < kMaxV; ++k) { ph_[k] += spinHz * (0.8f + 0.06f * float(k)) / sr_; if (ph_[k] >= 1.0f) { ph_[k] -= 1.0f; a_[k] = b_[k]; b_[k] = rnd(k); } }
+        const float maxD = float(dl_[0].capacity()) - 4.0f;
+        const float base0 = std::min(maxD, std::max(2.0f, p.timeMs * 0.001f * sr_));
+        if (rev) { revPh_ += 2.0f / base0; revPh_ -= std::floor(revPh_); }
         for (int c = 0; c < 2; ++c) {
             const float base = std::min(maxD, std::max(2.0f, p.timeMs * 0.001f * sr_ * (c ? 1.0f + p.wide : 1.0f)));
-            const float t = std::min(maxD, std::max(2.0f, base + 0.25f * wanderS * mod(c)));   // the feedback voice moves a little only
-            float d = dl_[c].read(t);
+            const float t = std::min(maxD, std::max(2.0f, base + mt[c] + 0.25f * wanderS * mod(c)));   // the feedback voice moves a little only
+            float d;
+            if (rev) {   // two heads sweep backwards through the last delay time, crossfaded
+                const float h1 = revPh_, h2 = revPh_ + 0.5f - std::floor(revPh_ + 0.5f);
+                const float w1 = std::sin(3.14159265f * h1), w2 = std::sin(3.14159265f * h2);
+                d = w1 * w1 * dl_[c].read(std::min(maxD, std::max(2.0f, base * h1 + 2.0f))) + w2 * w2 * dl_[c].read(std::min(maxD, std::max(2.0f, base * h2 + 2.0f)));
+            } else d = dl_[c].read(t);
             lp_[c] = d * (1 - damp) + lp_[c] * damp;
+            if (smearEff > 0.001f) { sm_[c] += ks * (lp_[c] - sm_[c]); lp_[c] = sm_[c]; }
             float shifted = ps_[c].tick(lp_[c], ratio);
-            fb[c] = (lp_[c] * (1 - p.shimmerAmount) + shifted * p.shimmerAmount) * p.feedback;
+            fb[c] = (lp_[c] * (1 - p.shimmerAmount) + shifted * p.shimmerAmount) * feedback;
             if (p.tap2 > 0.0f) d2[c] = p.tap2 * dl_[c].read(std::min(maxD, std::max(2.0f, base * p.tap2Ratio)));
             if (nv > 1) {   // voices k = 1 .. nv-1 at base * k / nv, levels follow Slope
                 float sum = 0, wsq = 0;
@@ -351,12 +398,12 @@ public:
                 dv[c] = 0.7f * sum / std::sqrt(std::max(1e-6f, wsq));   // energy-normalised for voices that do not match each other
             }
         }
-        const float ax = std::min(1.0f, std::fabs(p.crossFb));                 // self share + cross share never exceed the feedback setting
+        const float ax = std::min(1.0f, std::fabs(xf));                        // self share + cross share never exceed the feedback setting
         for (int c = 0; c < 2; ++c) {
             float x = in[c];
             if (p.diffusion > 0.0f) { const float g = 0.15f + 0.5f * p.diffusion; for (auto& a : dif_[c]) x = a.tick(x, g); }
-            dl_[c].push(x + std::tanh(fb[c] * (1.0f - ax) + fb[1 - c] * p.crossFb));
-            out[c] = in[c] * (1 - p.mix) + (lp_[c] + d2[c] + dv[c]) * p.mix;
+            dl_[c].push(x + std::tanh(fb[c] * (1.0f - ax) + fb[1 - c] * xf));
+            out[c] = dry[c] * (1 - p.mix) + (lp_[c] + d2[c] + dv[c]) * p.mix * dg * p.level;
         }
         outL = out[0]; outR = out[1];
     }
@@ -364,11 +411,57 @@ private:
     static constexpr int kMaxV = 8;
     float rnd(int k) { rng_[k] = rng_[k] * 1664525u + 1013904223u; return float((rng_[k] >> 8) & 0xFFFF) / 32768.0f - 1.0f; }
     float mod(int k) const { float t = ph_[k]; t = t * t * (3.0f - 2.0f * t); return a_[k] + (b_[k] - a_[k]) * t; }
-    float sr_ = 48000, lp_[2] = {}, ph_[kMaxV] = {}, a_[kMaxV] = {}, b_[kMaxV] = {}; unsigned rng_[kMaxV] = {};
+    float sr_ = 48000, lp_[2] = {}, sm_[2] = {}, lfo_[2] = {}, revPh_ = 0, duckEnv_ = 0, duckG_ = 0, ph_[kMaxV] = {}, a_[kMaxV] = {}, b_[kMaxV] = {}; unsigned rng_[kMaxV] = {};
     DelayLine dl_[2]; PitchShifter ps_[2]; Allpass dif_[2][3];
 };
 
-enum class ReverbType { Plate, Hall, Velvet };
+// Spring: two short feedback loops (34 and 41 ms) with a chain of first-order allpass filters inside, which smears the highs
+// ahead of the lows. That "chirp" is the boing of a real spring tank. Special = how strong the chirp is.
+class SpringReverb {
+public:
+    void prepare(float sr) { sr_ = sr; for (auto& d : dl_) d.prepare(int(0.1f * sr)); reset(); }
+    void reset() { for (auto& d : dl_) d.clear(); for (int c = 0; c < 2; ++c) { lp_[c] = 0; for (int k = 0; k < kStages; ++k) ax_[c][k] = ay_[c][k] = 0; } }
+    void process(float inL, float inR, float& outL, float& outR, const ReverbParams& p) {
+        const float rt60 = 0.4f + 3.6f * p.decay * p.decay, damp = std::exp(-6.2831853f * std::min(p.dampHz, 5000.0f) / sr_);
+        const float a = 0.35f + 0.45f * std::min(1.0f, std::max(0.0f, p.special));
+        const float in[2] = {inL, inR}; float o[2];
+        for (int c = 0; c < 2; ++c) {
+            const float len = (c ? 41.0f : 34.0f) * 0.001f * sr_ * (0.7f + 0.3f * std::min(1.6f, std::max(0.5f, p.size)));
+            float x = dl_[c].read(len);
+            for (int k = 0; k < kStages; ++k) { const float y = -a * x + ax_[c][k] + a * ay_[c][k]; ax_[c][k] = x; ay_[c][k] = y; x = y; }
+            lp_[c] += (1.0f - damp) * (x - lp_[c]);
+            const float g = std::pow(10.0f, -3.0f * (len / sr_) / rt60);
+            dl_[c].push(in[c] * 0.5f + std::tanh(lp_[c] * g));
+            o[c] = lp_[c];
+        }
+        outL = o[0] * kLevel; outR = o[1] * kLevel;
+    }
+    static constexpr float kLevel = 1.3f;
+private:
+    static constexpr int kStages = 36;
+    float sr_ = 48000, lp_[2] = {}, ax_[2][kStages] = {}, ay_[2][kStages] = {}; DelayLine dl_[2];
+};
+
+// Reverse: the wet signal is recorded and played backwards in overlapping windows, so the tail swells up and then stops.
+class ReverseWet {
+public:
+    void prepare(float sr) { sr_ = sr; for (auto& b : buf_) b.prepare(int(2.2f * sr)); reset(); }
+    void reset() { for (auto& b : buf_) b.clear(); ph_ = 0; }
+    void process(float& l, float& r, float special) {
+        const float win = (0.1f + 0.9f * std::min(1.0f, std::max(0.0f, special))) * sr_;
+        buf_[0].push(l); buf_[1].push(r);
+        ph_ += 1.0f / win; ph_ -= std::floor(ph_);
+        const float h1 = ph_, h2 = ph_ + 0.5f - std::floor(ph_ + 0.5f), w1 = std::sin(3.14159265f * h1), w2 = std::sin(3.14159265f * h2);
+        l = w1 * w1 * buf_[0].read(2.0f * win * h1 + 2.0f) + w2 * w2 * buf_[0].read(2.0f * win * h2 + 2.0f);
+        r = w1 * w1 * buf_[1].read(2.0f * win * h1 + 2.0f) + w2 * w2 * buf_[1].read(2.0f * win * h2 + 2.0f);
+    }
+private:
+    float sr_ = 48000, ph_ = 0; DelayLine buf_[2];
+};
+
+// Types 0..2 are the original ones (old saves keep their numbers). Room, Chamber and Arena are the hall network with their own size,
+// decay and damping; Gated cuts the plate tail after a hold time; Reverse plays the hall tail backwards; Spring is its own network.
+enum class ReverbType { Plate, Hall, Velvet, Room, Chamber, Arena, Spring, Gated, Reverse };
 
 struct ReverbSettings {
     ReverbType type = ReverbType::Plate;
@@ -379,6 +472,7 @@ struct ReverbSettings {
     bool shimmer = true;                                 // shimmer feedback on or off, independent of the type
     float lexBlend = 0.0f;                               // 0 = the chosen type only, 1 = Lexicat only, in between = both side by side
     float mix = 0.3f;
+    float level = 1.0f;                                  // gain of the wet signal only (linear), brings the reverb forward
 };
 
 // Velvet: two hall networks of different sizes in parallel with extra modulation. Denser and smoother than Hall.
@@ -408,8 +502,8 @@ private:
 // One reverb unit with all types. Shimmer = tail is pitch shifted and fed back into the reverb input.
 class ReverbUnit {
 public:
-    void prepare(float sr) { plate_.prepare(sr); hall_.prepare(sr); velvet_.prepare(sr); lex_.prepare(sr); ps_[0].prepare(sr, 80); ps_[1].prepare(sr, 80); qs_[0].prepare(sr, 80); qs_[1].prepare(sr, 80); sr_ = sr; reset(); }
-    void reset() { plate_.reset(); hall_.reset(); velvet_.reset(); lex_.reset(); ps_[0].reset(); ps_[1].reset(); qs_[0].reset(); qs_[1].reset(); last_[0] = last_[1] = 0; for (float& v : f_) v = 0; }
+    void prepare(float sr) { spring_.prepare(sr); rvw_.prepare(sr); plate_.prepare(sr); hall_.prepare(sr); velvet_.prepare(sr); lex_.prepare(sr); ps_[0].prepare(sr, 80); ps_[1].prepare(sr, 80); qs_[0].prepare(sr, 80); qs_[1].prepare(sr, 80); sr_ = sr; reset(); }
+    void reset() { spring_.reset(); rvw_.reset(); gEnv_ = gG_ = 0; gHold_ = 0; plate_.reset(); hall_.reset(); velvet_.reset(); lex_.reset(); ps_[0].reset(); ps_[1].reset(); qs_[0].reset(); qs_[1].reset(); last_[0] = last_[1] = 0; for (float& v : f_) v = 0; }
     void process(float inL, float inR, float& outL, float& outR, const ReverbSettings& s) {
         bool shim = s.shimmer && (s.shimmerAmount > 0.0f || s.shimmer2Amount > 0.0f);
         float ratio = std::pow(2.0f, s.shimmerSemis / 12.0f);
@@ -434,9 +528,26 @@ public:
         const float bl = std::min(1.0f, std::max(0.0f, s.lexBlend));
         float wl = 0, wr = 0, xl = 0, xr = 0;
         if (bl < 0.999f) {
-            if (s.type == ReverbType::Plate) plate_.process(fl, fr, wl, wr, s.p);
-            else if (s.type == ReverbType::Velvet) velvet_.process(fl, fr, wl, wr, s.p);
-            else hall_.process(fl, fr, wl, wr, s.p);
+            ReverbParams pp = s.p;
+            switch (s.type) {
+                case ReverbType::Plate: plate_.process(fl, fr, wl, wr, s.p); break;
+                case ReverbType::Velvet: velvet_.process(fl, fr, wl, wr, s.p); break;
+                case ReverbType::Room: pp.size = s.p.size * 0.28f; pp.decay = s.p.decay * 0.6f; pp.modDepth = s.p.modDepth * 0.4f; hall_.process(fl, fr, wl, wr, pp); wl *= 0.6f; wr *= 0.6f; break;
+                case ReverbType::Chamber: pp.size = s.p.size * 0.55f; pp.decay = s.p.decay * 0.85f; pp.dampHz = s.p.dampHz * 0.9f; hall_.process(fl, fr, wl, wr, pp); wl *= 0.83f; wr *= 0.83f; break;
+                case ReverbType::Arena: pp.size = s.p.size * 1.6f; pp.decay = 0.35f + 0.65f * s.p.decay; pp.dampHz = s.p.dampHz * 0.55f; hall_.process(fl, fr, wl, wr, pp); break;
+                case ReverbType::Spring: spring_.process(fl, fr, wl, wr, s.p); break;
+                case ReverbType::Gated: {
+                    plate_.process(fl, fr, wl, wr, s.p);
+                    const float a = std::max(std::fabs(inL), std::fabs(inR));
+                    gEnv_ += (a > gEnv_ ? 1.0f - std::exp(-1.0f / (0.001f * sr_)) : 1.0f - std::exp(-1.0f / (0.05f * sr_))) * (a - gEnv_);
+                    if (gEnv_ > 0.03f) gHold_ = int((0.04f + 0.46f * std::min(1.0f, std::max(0.0f, s.p.special))) * sr_); else if (gHold_ > 0) --gHold_;
+                    const float tgt = gHold_ > 0 ? 1.0f : 0.0f;
+                    gG_ += (tgt > gG_ ? 1.0f - std::exp(-1.0f / (0.002f * sr_)) : 1.0f - std::exp(-1.0f / (0.012f * sr_))) * (tgt - gG_);
+                    wl *= gG_; wr *= gG_; break;
+                }
+                case ReverbType::Reverse: hall_.process(fl, fr, wl, wr, s.p); rvw_.process(wl, wr, s.p.special); break;
+                default: hall_.process(fl, fr, wl, wr, s.p); break;
+            }
         }
         if (bl > 0.001f) lex_.process(fl, fr, xl, xr, s.p);
         const float fbl = wl * (1.0f - bl) + xl * bl * (1.0f / LexReverb::kLevel), fbr = wr * (1.0f - bl) + xr * bl * (1.0f / LexReverb::kLevel);   // feedback tap keeps the old loop gain
@@ -451,11 +562,11 @@ public:
                 f_[c*2+1] += kh * (*w[c] - f_[c*2+1]); *w[c] -= f_[c*2+1];     // high pass
             }
         }
-        outL = inL * (1 - s.mix) + wl * s.mix;
-        outR = inR * (1 - s.mix) + wr * s.mix;
+        outL = inL * (1 - s.mix) + wl * s.mix * s.level;
+        outR = inR * (1 - s.mix) + wr * s.mix * s.level;
     }
 private:
-    PlateReverb plate_; HallReverb hall_; VelvetReverb velvet_; LexReverb lex_; PitchShifter ps_[2], qs_[2]; float last_[2] = {}, f_[4] = {}, sr_ = 48000;
+    PlateReverb plate_; HallReverb hall_; VelvetReverb velvet_; LexReverb lex_; SpringReverb spring_; ReverseWet rvw_; float gEnv_ = 0, gG_ = 0; int gHold_ = 0; PitchShifter ps_[2], qs_[2]; float last_[2] = {}, f_[4] = {}, sr_ = 48000;
 };
 
 }  // namespace wm::engine

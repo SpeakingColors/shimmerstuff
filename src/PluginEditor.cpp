@@ -38,7 +38,8 @@ static juce::String fmtVal(const juce::String& id, float v)
 {
     if (id == "i_hp" || id == "i_lp" || id == "hp" || id == "lp" || id == "damp" || id == "ddamp") return fmtHz(v);
     if (id == "predelay" || id == "dtime" || id == "w_drel") return juce::String(juce::roundToInt(v)) + " ms";
-    if (id == "w_boost" || id == "i_drive" || id == "w_drive") return juce::String(v, 1) + " dB";
+    if (id == "w_boost" || id == "i_drive" || id == "w_drive" || id == "rlevel" || id == "dlevel" || id == "m_level") return (v > 0.04f ? "+" : "") + juce::String(v, 1) + " dB";
+    if (id.endsWith("_speed")) return juce::String(v, 2) + " Hz";
     return juce::String(juce::roundToInt(v * 100.f)) + " %";
 }
 
@@ -131,7 +132,7 @@ void Knob::init(juce::Component& parent, juce::AudioProcessorValueTreeState& apv
     name.setText(nm.toUpperCase(), juce::dontSendNotification);
     s.setColour(juce::Slider::rotarySliderFillColourId, accent); val.setColour(juce::Label::textColourId, accent);
     s.setTooltip(tip + " Double-click the knob to reset it, double-click the number to type a value.");
-    parent.addAndMakeVisible(*this);
+    parent.addAndMakeVisible(*this); apv = &apvts;
     a = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, id, s);
     if (auto* par = apvts.getParameter(id)) s.setDoubleClickReturnValue(true, par->convertFrom0to1(par->getDefaultValue()));
     s.textFromValueFunction = [k](double v) -> juce::String
@@ -145,6 +146,7 @@ void Knob::init(juce::Component& parent, juce::AudioProcessorValueTreeState& apv
             case St: return (v > 0.4 ? "+" : "") + juce::String(juce::roundToInt(v)) + " st";
             case Db: return juce::String(v, 1) + " dB";
             case Int: return v < 1.5 ? juce::String("off") : juce::String(juce::roundToInt(v));
+            case Wave: { const int w = juce::roundToInt(v); return w <= 0 ? "Sine" : w == 1 ? "Triangle" : "Square"; }
             default: { const int p = juce::roundToInt(v * 100.0); return (p > 0 ? "+" : "") + juce::String(p); }
         }
     };
@@ -155,6 +157,16 @@ void Knob::init(juce::Component& parent, juce::AudioProcessorValueTreeState& apv
     };
     s.onValueChange = [this] { val.setText(s.getTextFromValue(s.getValue()), juce::dontSendNotification); };
     val.onTextChange = [this] { s.setValue(s.getValueFromText(val.getText()), juce::sendNotificationSync); val.setText(s.getTextFromValue(s.getValue()), juce::dontSendNotification); };
+    s.onValueChange();
+}
+void Knob::rebind(const juce::String& id)
+{
+    if (apv == nullptr || apv->getParameter(id) == nullptr) return;
+    const auto tf = s.textFromValueFunction; const auto vf = s.valueFromTextFunction;   // the attachment replaces them, so keep ours
+    a.reset();
+    a = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(*apv, id, s);
+    s.textFromValueFunction = tf; s.valueFromTextFunction = vf;
+    if (auto* par = apv->getParameter(id)) s.setDoubleClickReturnValue(true, par->convertFrom0to1(par->getDefaultValue()));
     s.onValueChange();
 }
 void Knob::resized()
@@ -333,7 +345,7 @@ ToneView::ToneView(ShimmerstuffProcessor& p, int mode) : proc(p)
 {
     if (mode == 0) lines = { { "hp", "HP", col::blue }, { "damp", "Damp", col::yellow }, { "lp", "LP", col::blue } };
     else if (mode == 1) lines = { { "ddamp", "Damp", col::yellow } };
-    else lines = { { "i_hp", "In HP", col::blue }, { "i_lp", "In LP", col::blue } };
+    else if (mode == 2) lines = { { "i_hp", "In HP", col::blue }, { "i_lp", "In LP", col::blue } };
     magIn.assign(N / 2, -120.f); magOut.assign(N / 2, -120.f);
 }
 juce::Rectangle<float> ToneView::plot() const { return { 52.f, 16.f, (float) getWidth() - 52.f - 20.f, (float) getHeight() - 16.f - 28.f }; }
@@ -502,19 +514,64 @@ void ShapeView::mouseDown(const juce::MouseEvent& e)
     gesture(proc, "w_dshape", true); proc.setParam("w_dshape", (float) i); gesture(proc, "w_dshape", false); repaint();
 }
 
-// ---------------------------------------------------------------- RouteView
-const char* RouteView::nodeName(int n) { static const char* s[4] = { "INPUT FX", "REVERB", "DELAY", "WET FX" }; return s[n & 3]; }
-const char* RouteView::nodeSub(int n) { static const char* s[4] = { "filter + saturation", "", "", "sat, squash, duck, width" }; return s[n & 3]; }
-const char* RouteView::onId(int n) { static const char* s[4] = { "ifx_on", "rev_on", "del_on", "wfx_on" }; return s[n & 3]; }
-const char* RouteView::rowId(int n, int i)
+// ---------------------------------------------------------------- ModView
+void ModView::paint(juce::Graphics& g)
 {
-    static const char* s[4][3] = { { "i_hp", "i_lp", "i_mix" }, { "decay", "predelay", "mix" }, { "dtime", "dfb", "dmix" }, { "w_boost", "w_duck", "w_width" } };
-    return s[n & 3][i % 3];
+    g.fillAll(col::disp); g.setColour(col::line); g.drawRect(getLocalBounds(), 1);
+    const int e = juce::jlimit(0, 7, (int) proc.get("m_type"));
+    static const char* nm[8] = { "Chorus", "Flanger", "Phaser", "Tremolo", "Pan", "Rotary", "Vibrato", "Detune" };
+    const float speed = proc.get(ssp::modId(e, 0)), depth = proc.get(ssp::modId(e, 1)), phase = proc.get(ssp::modId(e, 8));
+    const int wf = juce::roundToInt(proc.get(ssp::modId(e, 7)));
+    const auto pl = juce::Rectangle<float>(52.f, 30.f, (float) getWidth() - 52.f - 24.f, (float) getHeight() - 30.f - 34.f);
+    g.setColour(col::dim); g.setFont(font(13.f, false, 0.03f));
+    g.drawText(juce::String("Editing: ") + nm[e] + (proc.get(ssp::modOnId(e)) > .5f ? "" : " (off)"), 18, 8, 300, 18, juce::Justification::left);
+    for (int i = 0; i <= 4; ++i) { const float y = pl.getY() + pl.getHeight() * (float) i / 4.f; g.setColour(juce::Colour(0xff1b2523)); g.drawHorizontalLine((int) y, pl.getX(), pl.getRight()); }
+    g.setFont(mono(10.5f)); g.setColour(col::lilac.withAlpha(0.7f)); g.drawText("max", 8, (int) pl.getY() - 6, 40, 12, juce::Justification::right); g.drawText("min", 8, (int) pl.getBottom() - 6, 40, 12, juce::Justification::right);
+    if (e == 7)
+    {
+        g.setColour(col::dim); g.setFont(font(15.f)); g.drawText("Detune has no movement: it adds a slightly sharp and flat copy to thicken the sound.", pl.toNearestInt(), juce::Justification::centred); return;
+    }
+    const float cycles = 3.f;
+    auto lfo = [&](float ph)
+    {
+        ph -= std::floor(ph);
+        if (wf == 1) return ph < 0.5f ? 4.f * ph - 1.f : 3.f - 4.f * ph;
+        const float sn = std::sin(juce::MathConstants<float>::twoPi * ph);
+        return wf >= 2 ? std::tanh(3.f * sn) / std::tanh(3.f) : sn;
+    };
+    const float off = 0.5f * juce::jlimit(0.f, 1.f, phase), dp = e == 5 ? 1.f : juce::jlimit(0.f, 1.f, depth);
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        juce::Path path;
+        for (int i = 0; i <= 240; ++i)
+        {
+            const float t = (float) i / 240.f, v = 0.5f + 0.5f * lfo(t * cycles + (ch ? off : 0.f)), y = pl.getBottom() - pl.getHeight() * (1.f - dp * (1.f - v)) * 1.f;
+            const float yy = pl.getBottom() - pl.getHeight() * (1.f - dp + dp * v);
+            juce::ignoreUnused(y);
+            if (i == 0) path.startNewSubPath(pl.getX() + t * pl.getWidth(), yy); else path.lineTo(pl.getX() + t * pl.getWidth(), yy);
+        }
+        if (ch == 0) { g.setColour(col::pink); g.strokePath(path, juce::PathStrokeType(2.f)); }
+        else { juce::Path d; const float dl[2] = { 6.f, 4.f }; juce::PathStrokeType(1.6f).createDashedStroke(d, path, dl, 2); g.setColour(col::mint); g.fillPath(d); }
+    }
+    g.setColour(col::dim); g.setFont(mono(12.f));
+    g.drawText(juce::String(speed, 2) + " Hz   depth " + juce::String(juce::roundToInt(depth * 100.f)) + " %   left solid, right dashed", pl.getX() > 0 ? juce::Rectangle<int>((int) pl.getX(), getHeight() - 26, (int) pl.getWidth(), 18) : getLocalBounds(), juce::Justification::centred);
+}
+
+// ---------------------------------------------------------------- RouteView
+const char* RouteView::nodeName(int n) { static const char* s[5] = { "INPUT FX", "REVERB", "DELAY", "WET FX", "MODULATION" }; return s[juce::jlimit(0, 4, n)]; }
+const char* RouteView::nodeSub(int n) { static const char* s[5] = { "filter + saturation", "", "", "sat, squash, duck, width", "" }; return s[juce::jlimit(0, 4, n)]; }
+const char* RouteView::onId(int n) { static const char* s[5] = { "ifx_on", "rev_on", "del_on", "wfx_on", "mod_on" }; return s[juce::jlimit(0, 4, n)]; }
+const char* RouteView::rowId(int n, int i) const
+{
+    static const char* s[5][3] = { { "i_hp", "i_lp", "i_mix" }, { "decay", "predelay", "mix" }, { "dtime", "dfb", "dmix" }, { "w_boost", "w_duck", "w_width" }, { "", "m_mix", "m_level" } };
+    n = juce::jlimit(0, 4, n);
+    if (n == 4 && i % 3 == 0) return ssp::modId(juce::jlimit(0, 7, (int) proc.get("m_type")), 0);
+    return s[n][i % 3];
 }
 const char* RouteView::rowName(int n, int i)
 {
-    static const char* s[4][3] = { { "HP", "LP", "Sat mix" }, { "Decay", "Pre-delay", "Mix" }, { "Time", "Feedback", "Mix" }, { "Boost", "Duck", "Width" } };
-    return s[n & 3][i % 3];
+    static const char* s[5][3] = { { "HP", "LP", "Sat mix" }, { "Decay", "Pre-delay", "Mix" }, { "Time", "Feedback", "Mix" }, { "Boost", "Duck", "Width" }, { "Speed", "Mix", "Level" } };
+    return s[juce::jlimit(0, 4, n)][i % 3];
 }
 int RouteView::stageCount() const { return wm::fx::parseGraph(proc.getGraph().toStdString()).stages; }
 float RouteView::colX(int stage) const { return (float) getWidth() * ((float) stage + 0.5f) / (float) (stageCount() + 2); }
@@ -570,7 +627,7 @@ void RouteView::paint(juce::Graphics& g)
     for (int s = 0; s < gr.stages; ++s)
     {
         float sum = 0.f;
-        for (int j = 0; j < gr.count[s]; ++j) { const int n = gr.items[s][j]; sum += n == wm::fx::kRev && proc.get("rev_on") > .5f ? 1.f - proc.get("mix") : n == wm::fx::kDel && proc.get("del_on") > .5f ? 1.f - proc.get("dmix") : 1.f; }
+        for (int j = 0; j < gr.count[s]; ++j) { const int n = gr.items[s][j]; sum += n == wm::fx::kRev && proc.get("rev_on") > .5f ? 1.f - proc.get("mix") : n == wm::fx::kDel && proc.get("del_on") > .5f ? 1.f - proc.get("dmix") : n == wm::fx::kMod && proc.get("mod_on") > .5f ? 1.f - proc.get("m_mix") : 1.f; }
         dry *= sum / (float) gr.count[s];
     }
     {
@@ -583,7 +640,7 @@ void RouteView::paint(juce::Graphics& g)
     {
         auto r = b.r; if (moving && b.node == dragNode) r = r.withCentre(cur);
         const bool on = proc.get(onId(b.node)) > .5f; const bool big = r.getHeight() >= 100.f;
-        const juce::Colour c = b.node == wm::fx::kRev ? col::lilac : b.node == wm::fx::kDel ? col::mint : b.node == wm::fx::kIfx ? col::blue : col::yellow;
+        const juce::Colour c = b.node == wm::fx::kRev ? col::lilac : b.node == wm::fx::kDel ? col::mint : b.node == wm::fx::kIfx ? col::blue : b.node == wm::fx::kMod ? col::pink : col::yellow;
         g.setColour(col::panel2.withAlpha(moving && b.node == dragNode ? 0.75f : 1.f)); g.fillRoundedRectangle(r, 7.f);
         if (on) { g.setColour(c); g.drawRoundedRectangle(r, 7.f, 2.f); }
         else { juce::Path rp; rp.addRoundedRectangle(r, 7.f); juce::Path d; const float dl[2] = { 5.f, 4.f }; juce::PathStrokeType(1.3f).createDashedStroke(d, rp, dl, 2); g.setColour(col::dim.withAlpha(0.7f)); g.fillPath(d); }
@@ -593,12 +650,20 @@ void RouteView::paint(juce::Graphics& g)
         const auto t = juce::Rectangle<float>(r.getRight() - 24.f, r.getY() + 7.f, 14.f, 13.f);
         g.setColour(col::dim); g.drawRect(t, 1.2f); g.drawLine(t.getX() + 4.f, t.getBottom() - 3.f, t.getRight() + 1.f, t.getY() - 1.f, 1.2f);
         g.drawLine(t.getRight() - 4.f, t.getY() - 1.f, t.getRight() + 1.f, t.getY() - 1.f, 1.2f); g.drawLine(t.getRight() + 1.f, t.getY() - 1.f, t.getRight() + 1.f, t.getY() + 4.f, 1.2f);
-        g.setColour(on ? c : col::dim); g.setFont(font(big ? 16.f : 13.f, true, 0.03f));
-        g.drawText(juce::String(nodeName(b.node)) + (on ? "" : " (off)"), r.withTrimmedLeft(26.f).withTrimmedRight(26.f).withHeight(big ? 26.f : 22.f).toNearestInt(), juce::Justification::centred);
+        g.setColour(on ? c : col::dim);
+        { const juce::String nt = juce::String(nodeName(b.node)) + (on ? "" : " (off)"); float fs = big ? 16.f : 13.f; const float room = r.getWidth() - 52.f;
+          while (fs > 8.f && strW(font(fs, true, 0.03f), nt) > room) fs -= 0.5f;
+          g.setFont(font(fs, true, 0.03f)); g.drawText(nt, r.withTrimmedLeft(26.f).withTrimmedRight(26.f).withHeight(big ? 26.f : 22.f).toNearestInt(), juce::Justification::centred); }
         if (big)
         {
             juce::String sub = nodeSub(b.node);
-            if (b.node == wm::fx::kRev) sub = ShimmerstuffProcessor::typeNames()[juce::jlimit(0, 2, (int) proc.get("type"))];
+            if (b.node == wm::fx::kRev) sub = ShimmerstuffProcessor::typeNames()[juce::jlimit(0, 8, (int) proc.get("type"))];
+            if (b.node == wm::fx::kMod)
+            {
+                sub = {}; static const char* nm[8] = { "Chorus", "Flanger", "Phaser", "Tremolo", "Pan", "Rotary", "Vibrato", "Detune" };
+                for (int k = 0; k < 8; ++k) if (proc.get(ssp::modOnId(k)) > .5f) sub << (sub.isEmpty() ? "" : " + ") << nm[k];
+                if (sub.isEmpty()) sub = "no effect on";
+            }
             if (b.node == wm::fx::kDel) sub = (proc.get("dshift") > 0.4f ? "+" : "") + juce::String(juce::roundToInt(proc.get("dshift"))) + " st per repeat";
             g.setColour(col::dim); g.setFont(font(11.f, false, 0.03f)); g.drawText(sub, r.withTrimmedTop(26.f).withHeight(16.f).toNearestInt(), juce::Justification::centred);
         }
@@ -622,7 +687,7 @@ void RouteView::mouseDown(const juce::MouseEvent& e)
         if (juce::Rectangle<float>(b.r.getX(), b.r.getY(), 30.f, 28.f).contains(e.position))
         { const juce::String id = onId(b.node); gesture(proc, id, true); setNorm(proc, id, proc.get(id) > .5f ? 0.f : 1.f); gesture(proc, id, false); repaint(); return; }
         if (juce::Rectangle<float>(b.r.getRight() - 30.f, b.r.getY(), 30.f, 28.f).contains(e.position))
-        { openTab(b.node == wm::fx::kRev ? 0 : b.node == wm::fx::kDel ? 1 : 2); return; }
+        { openTab(b.node == wm::fx::kRev ? 0 : b.node == wm::fx::kDel ? 1 : b.node == wm::fx::kMod ? 2 : 3); return; }
         const int row = rowAt(b, e.position);
         if (row >= 0) { valNode = b.node; valRow = row; valStart = getNorm(proc, rowId(b.node, row)); gesture(proc, rowId(b.node, row), true); return; }
         dragNode = b.node; return;
@@ -643,18 +708,18 @@ void RouteView::mouseUp(const juce::MouseEvent& e)
         for (int s = 0; s < g.stages; ++s)
             for (int j = 0; j < g.count[s]; ++j)
                 if (g.items[s][j] == dragNode) { for (int k = j; k + 1 < g.count[s]; ++k) g.items[s][k] = g.items[s][k + 1]; --g.count[s]; }
-        for (int s = 0; s < g.stages; ) { if (g.count[s] == 0) { for (int k = s; k + 1 < g.stages; ++k) { g.count[k] = g.count[k + 1]; for (int j = 0; j < 4; ++j) g.items[k][j] = g.items[k + 1][j]; } --g.stages; } else ++s; }
+        for (int s = 0; s < g.stages; ) { if (g.count[s] == 0) { for (int k = s; k + 1 < g.stages; ++k) { g.count[k] = g.count[k + 1]; for (int j = 0; j < 5; ++j) g.items[k][j] = g.items[k + 1][j]; } --g.stages; } else ++s; }
         const float w = (float) getWidth(); int placed = -1;
         for (int s = 0; s < g.stages; ++s)
         {
             const float cx = w * ((float) (s + 1) + 0.5f) / (float) (g.stages + 2);
-            if (std::abs(e.position.x - cx) < 0.3f * w / (float) (g.stages + 2) && g.count[s] < 4) { g.items[s][g.count[s]++] = dragNode; placed = s; break; }
+            if (std::abs(e.position.x - cx) < 0.3f * w / (float) (g.stages + 2) && g.count[s] < 5) { g.items[s][g.count[s]++] = dragNode; placed = s; break; }
         }
         if (placed < 0)
         {
             int at = g.stages;
             for (int s = 0; s < g.stages; ++s) { const float cx = w * ((float) (s + 1) + 0.5f) / (float) (g.stages + 2); if (e.position.x < cx) { at = s; break; } }
-            for (int k = g.stages; k > at; --k) { g.count[k] = g.count[k - 1]; for (int j = 0; j < 4; ++j) g.items[k][j] = g.items[k - 1][j]; }
+            for (int k = g.stages; k > at; --k) { g.count[k] = g.count[k - 1]; for (int j = 0; j < 5; ++j) g.items[k][j] = g.items[k - 1][j]; }
             g.items[at][0] = dragNode; g.count[at] = 1; ++g.stages;
         }
         proc.setGraph(juce::String(wm::fx::graphString(g)));
@@ -706,10 +771,10 @@ void LevelMeter::paint(juce::Graphics& g)
         }
         g.setColour(col::dim); g.setFont(font(10.f, false, 0.1f)); g.drawText(c == 0 ? "IN" : "OUT", (int) x - 4, (int) r.getBottom() - 14, (int) (2.f * bw + 12.f), 12, juce::Justification::centred);
     }
-    const bool delTab = tab == 1;
+    const bool delTab = tab == 1, modTab = tab == 2;
     struct R { juce::String a, av, b, bv; };
     const R rows[3] = { { "In peak", dbText(inMax), "Out peak", dbText(outMax) }, { "RMS", dbText(proc.rms.load()), tab == 0 ? "RT60" : "Echo", tab == 0 ? juce::String(rt60, 1) + " s" : juce::String(juce::roundToInt(proc.get("dtime"))) + " ms" },
-                        { "Mix", juce::String(juce::roundToInt((delTab ? proc.get("dmix") : proc.get("mix")) * 100.f)) + " %", "Clip", clip ? "yes" : "no" } };
+                        { "Mix", juce::String(juce::roundToInt((delTab ? proc.get("dmix") : modTab ? proc.get("m_mix") : proc.get("mix")) * 100.f)) + " %", "Clip", clip ? "yes" : "no" } };
     g.setFont(mono(11.f));
     for (int i = 0; i < 3; ++i)
     {
@@ -722,22 +787,25 @@ void LevelMeter::paint(juce::Graphics& g)
 // ---------------------------------------------------------------- Body
 namespace
 {
-const char* kTabTitle[3] = { "SHIMMER REVERB", "SHIMMER DELAY", "FX & ROUTING" };
-const char* kTabSub[3] = { "VST3 and Standalone", "VST3 and Standalone", "input and wet processing" };
-const char* kHeadTitle[3] = { "SHIMMER REVERB", "SHIMMER DELAY", "FX AND ROUTING" };
-const char* kSubName[3][2] = { { "DECAY", "TONE" }, { "ECHOES", "TONE" }, { "ROUTING", "TONE" } };
-const char* kDirName[3] = { "reverb", "delay", "fx" };
-const std::vector<const char*>& keysOf(int t) { return t == 0 ? ssp::reverbKeys() : t == 1 ? ssp::delayKeys() : ssp::fxKeys(); }
+const char* kTabTitle[4] = { "REVERB", "DELAY", "MODULATION", "FX & ROUTING" };
+const char* kTabSub[4] = { "VST3 and Standalone", "VST3 and Standalone", "chorus, phaser, rotary...", "input and wet processing" };
+const char* kHeadTitle[4] = { "SHIMMER REVERB", "SHIMMER DELAY", "MODULATION", "FX AND ROUTING" };
+const char* kSubName[4][2] = { { "DECAY", "TONE" }, { "ECHOES", "TONE" }, { "MOVEMENT", "TONE" }, { "ROUTING", "TONE" } };
+const char* kDirName[4] = { "reverb", "delay", "modulation", "fx" };
+const std::vector<const char*>& keysOf(int t) { return t == 0 ? ssp::reverbKeys() : t == 1 ? ssp::delayKeys() : t == 2 ? ssp::modKeys() : ssp::fxKeys(); }
+const char* tabOnId(int t) { return t == 0 ? "rev_on" : t == 1 ? "del_on" : t == 2 ? "mod_on" : nullptr; }
+// which of the 15 per-effect modulation knobs each effect uses (bit = effect index)
+const int kModUse[15] = { 0x7F, 0x5F, 0x01, 0x04, 0x07, 0x83, 0x01, 0x5F, 0x4F, 0x20, 0x20, 0x20, 0x20, 0x20, 0x80 };
 }
 
 Body::Body(ShimmerstuffProcessor& p)
-    : proc(p), decay(p), toneRev(p, 0), toneDel(p, 1), toneFx(p, 2), echo(p), route(p, [this](int t) { setTab(t); }), shape(p), meter(p)
+    : proc(p), decay(p), toneRev(p, 0), toneDel(p, 1), toneFx(p, 2), toneMod(p, 3), modv(p), echo(p), route(p, [this](int t) { setTab(t); }), shape(p), meter(p)
 {
     setLookAndFeel(&laf); setSize(IW, IH);
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         tabBtn[i].title = kTabTitle[i]; tabBtn[i].subtitle = kTabSub[i]; tabBtn[i].onClick = [this, i] { setTab(i); }; addAndMakeVisible(tabBtn[i]);
-        tabBtn[i].setTooltip(i == 0 ? "Reverb: plate, hall, shimmer plate, shimmer hall and velvet. A view for fine tuning: the routing stays as you set it." : i == 1 ? "Delay: echoes that climb (or fall) in pitch with every repeat. A view for fine tuning: the routing stays as you set it." : "Route the reverb and delay (one, the other, in series or in parallel) and add saturation, squash, duck and width.");
+        tabBtn[i].setTooltip(i == 0 ? "Reverb: nine types (plate, hall, velvet, room, chamber, arena, spring, gated, reverse), shimmer and Lexicat. A view for fine tuning: the routing stays as you set it." : i == 1 ? "Delay: studio, tape, ping pong, modulated or reverse echoes that climb (or fall) in pitch with every repeat. A view for fine tuning: the routing stays as you set it." : i == 2 ? "Modulation: chorus, flanger, phaser, tremolo, pan, rotary, vibrato and detune. Use any of them together. A view for fine tuning: the routing stays as you set it." : "Route the reverb, delay and modulation (one, the other, in series or in parallel) and add saturation, squash, duck and width.");
         for (int j = 0; j < 2; ++j) { subBtn[i][j].setButtonText(kSubName[i][j]); subBtn[i][j].onClick = [this, i, j] { sub[i] = j; setTab(tab); }; addChildComponent(subBtn[i][j]); }
     }
     for (auto* b : { &pPrev, &pNext, &pSave, &pMore, &bGuide, &bSet, &bAbout, &mainSave, &turnOn, &peakReset }) addAndMakeVisible(*b);
@@ -752,10 +820,10 @@ Body::Body(ShimmerstuffProcessor& p)
     addAndMakeVisible(tabCombo); addAndMakeVisible(mainCombo);
     tabCombo.setTooltip("Presets for this tab: factory ones and your own. Moving a control shows Custom."); tabCombo.onChange = [this] { tabPresetChosen(); };
     mainCombo.setTooltip("Main presets: the whole plugin (reverb, delay, FX and routing) in one go."); mainCombo.setTextWhenNothingSelected("Main preset: choose..."); mainCombo.onChange = [this] { mainPresetChosen(); };
-    for (auto* v : { (juce::Component*) &decay, (juce::Component*) &toneRev, (juce::Component*) &toneDel, (juce::Component*) &toneFx, (juce::Component*) &echo, (juce::Component*) &route, (juce::Component*) &shape }) addChildComponent(*v);
+    for (auto* v : { (juce::Component*) &decay, (juce::Component*) &toneRev, (juce::Component*) &toneDel, (juce::Component*) &toneFx, (juce::Component*) &toneMod, (juce::Component*) &modv, (juce::Component*) &echo, (juce::Component*) &route, (juce::Component*) &shape }) addChildComponent(*v);
     addAndMakeVisible(meter); peakReset.toFront(false);
     auto& a = p.apvts;
-    rType.init(*this, a, "type", "Type", ShimmerstuffProcessor::typeNames(), "Plate (bright and dense), hall (bigger and smoother) or velvet (dense and soft). Shimmer has its own switch.");
+    rType.init(*this, a, "type", "Type", ShimmerstuffProcessor::typeNames(), "Nine reverbs. Plate: bright and dense. Hall: bigger and smoother. Velvet: dense and soft. Room, Chamber and Arena: small to huge spaces. Spring: boingy. Gated: cut off short. Reverse: swells into the sound. Shimmer has its own switch.");
     rMode.init(*this, a, "lexmode", "Mode", juce::StringArray { "Hall", "Random Hall", "Plate", "Chamber", "Room" }, "Hall: stable, wide, natural build-up. Random Hall: strong random movement for a big, smooth, long tail. Plate: dense and bright from the start. Chamber: very dense, quick onset. Room: small, early reflections up front. Every mode is level matched.");
     shimTog.setClickingTogglesState(true); addAndMakeVisible(shimTog); shimTog.setColour(juce::TextButton::buttonOnColourId, col::sel); shimTog.setColour(juce::TextButton::textColourOnId, col::yellow);
     shimTog.setTooltip("Turns the shimmer on or off for any reverb type, Lexicat included. Changing the type does not touch it.");
@@ -766,13 +834,14 @@ Body::Body(ShimmerstuffProcessor& p)
     dRatio.init(*this, a, "w_dratio", "Ratio", ShimmerstuffProcessor::ratioNames(), "Length of one duck cycle at the host tempo (4/4). 1/4 is one beat.");
     shape.setTooltip("Duck shape: click one. Taller means more ducking at that moment of the cycle.");
     struct K { const char* id; const char* name; Knob::Kind k; };
-    const K rks[22] = { { "decay", "Decay", Knob::Pct }, { "size", "Size", Knob::Size }, { "predelay", "Pre-delay", Knob::Ms }, { "mod", "Modulation", Knob::Pct }, { "color", "Velvet colour", Knob::Plain },
+    const K rks[24] = { { "decay", "Decay", Knob::Pct }, { "size", "Size", Knob::Size }, { "predelay", "Pre-delay", Knob::Ms }, { "mod", "Modulation", Knob::Pct }, { "color", "Colour", Knob::Plain },
         { "shift", "Pitch", Knob::St }, { "shimmer", "Amount", Knob::Pct }, { "shift2", "Pitch 2", Knob::St }, { "shimmer2", "Amount 2", Knob::Pct },
         { "damp", "Damping", Knob::Hz }, { "hp", "Wet HP", Knob::Hz }, { "lp", "Wet LP", Knob::Hz }, { "mix", "Mix", Knob::Pct },
         { "lexmix", "Blend", Knob::Pct }, { "bass", "Bass x", Knob::Size }, { "xover", "Crossover", Knob::Hz }, { "shape", "Shape", Knob::Pct }, { "spread", "Spread", Knob::Pct },
-        { "diff", "Diffusion", Knob::Pct }, { "spin", "Spin", Knob::Pct }, { "wander", "Wander", Knob::Pct }, { "early", "Pre-echoes", Knob::Pct } };
-    const char* rtip[22] = { "Tail length. Drag the yellow dot in the Decay view sideways too.", "Room size. Drag the yellow dot up or down too.", "Gap before the reverb starts. Drag the cyan handle too.", "Slow movement inside the tail, for a lusher sound.",
-        "Velvet only: dark to bright tilt.", "Pitch of the shimmer voice fed back into the reverb (shimmer types).", "How much shifted tail is fed back (shimmer types). Drag the orange handle too.", "Pitch of the second shimmer voice.", "Amount of the second shimmer voice. 0 is off.",
+        { "diff", "Diffusion", Knob::Pct }, { "spin", "Spin", Knob::Pct }, { "wander", "Wander", Knob::Pct }, { "early", "Pre-echoes", Knob::Pct },
+        { "rlevel", "Level", Knob::Db }, { "rspec", "Special", Knob::Pct } };
+    const char* rtip[24] = { "Tail length. Drag the yellow dot in the Decay view sideways too.", "Room size. Drag the yellow dot up or down too.", "Gap before the reverb starts. Drag the cyan handle too.", "Slow movement inside the tail, for a lusher sound.",
+        "Dark to bright tilt of the tail. Velvet only.", "Pitch of the shimmer voice fed back into the reverb (shimmer types).", "How much shifted tail is fed back (shimmer types). Drag the orange handle too.", "Pitch of the second shimmer voice.", "Amount of the second shimmer voice. 0 is off.",
         "Darkens the tail. Drag the blue handle or the line in the Tone view too.", "High-pass on the reverb tail only. Keeps the tail out of the bass.", "Low-pass on the reverb tail only.", "Reverb dry/wet. Drag the pink handle too.",
         "How much Lexicat is mixed with the reverb type. 0 is the type only, 100 % is Lexicat only, in between you hear both. With shimmer on, the shifted tail feeds both.",
         "Bass multiply: how much longer the lows ring than the mids. 1.0 is even, 1.5 or less sounds like a real hall, 2 gives a big boomy bottom.",
@@ -782,14 +851,17 @@ Body::Body(ShimmerstuffProcessor& p)
         "How fast the echoes thicken. High is smooth and good for drums. Low to medium keeps vocals and mixes clear.",
         "Speed of the slow random movement of the delays. Movement smooths the tail so it is less metallic.",
         "How far the delays move. Random Hall mode moves them the most. Too much makes held notes waver in pitch.",
-        "Level of four early reflections that bypass the tail and ignore pre-delay." };
-    const juce::Colour rcol[22] = { col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::yellow, col::yellow, col::yellow, col::yellow, col::blue, col::blue, col::blue, col::pink,
-        col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac };
-    for (int i = 0; i < 22; ++i) rk[i].init(*this, a, rks[i].id, rks[i].name, rks[i].k, rcol[i], rtip[i]);
-    const K dks[15] = { { "dtime", "Time", Knob::Ms }, { "dfb", "Feedback", Knob::Pct }, { "dshift", "Shift", Knob::St }, { "dshim", "Shimmer", Knob::Pct }, { "ddamp", "Damping", Knob::Hz }, { "dmix", "Mix", Knob::Pct },
+        "Level of four early reflections that bypass the tail and ignore pre-delay.",
+        "Level of the whole reverb (any type, Lexicat and shimmer included). Push it to bring the reverb forward in the mix without touching the dry sound.",
+        "A type specific control. Gated: hold time before the cut. Reverse: length of the reverse window. Spring: how much boing. Other types ignore it." };
+    const juce::Colour rcol[24] = { col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::yellow, col::yellow, col::yellow, col::yellow, col::blue, col::blue, col::blue, col::pink,
+        col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::pink, col::lilac };
+    for (int i = 0; i < 24; ++i) rk[i].init(*this, a, rks[i].id, rks[i].name, rks[i].k, rcol[i], rtip[i]);
+    const K dks[21] = { { "dtime", "Time", Knob::Ms }, { "dfb", "Feedback", Knob::Pct }, { "dshift", "Shift", Knob::St }, { "dshim", "Shimmer", Knob::Pct }, { "ddamp", "Damping", Knob::Hz }, { "dmix", "Mix", Knob::Pct },
         { "dxfb", "Cross fb", Knob::Plain }, { "dwide", "Width", Knob::Pct }, { "dtap2", "2nd voice", Knob::Pct }, { "dratio2", "2nd time", Knob::Size }, { "dvoices", "Voices", Knob::Int },
-        { "dslope", "Slope", Knob::Plain }, { "dwander", "Wander", Knob::Pct }, { "dspin", "Spin", Knob::Pct }, { "ddiff", "Diffusion", Knob::Pct } };
-    const char* dtip[15] = { "Time between repeats. Drag the first dot in the Echoes view too.", "How much of each repeat goes back in. Drag the second dot too.", "Pitch change added at every repeat. +12 climbs an octave each time.",
+        { "dslope", "Slope", Knob::Plain }, { "dwander", "Wander", Knob::Pct }, { "dspin", "Spin", Knob::Pct }, { "ddiff", "Diffusion", Knob::Pct },
+        { "dlevel", "Level", Knob::Db }, { "dsmear", "Smear", Knob::Pct }, { "dmod", "Mod depth", Knob::Pct }, { "drate", "Mod rate", Knob::Plain }, { "dduck", "Ducker", Knob::Pct }, { "dthr", "Threshold", Knob::Pct } };
+    const char* dtip[21] = { "Time between repeats. Drag the first dot in the Echoes view too.", "How much of each repeat goes back in. Drag the second dot too.", "Pitch change added at every repeat. +12 climbs an octave each time.",
         "How much of each repeat is shifted. 0 is a plain delay.", "Darkens every repeat a little more.", "Delay dry/wet.",
         "Sends the repeats to the other channel so they bounce left and right. Negative flips the sign of each bounce for a hollow, phasey feel. 0 is off.",
         "Makes the right channel delay longer than the left by this much, so the echoes spread across the stereo field. 0 is off.",
@@ -799,9 +871,54 @@ Body::Body(ShimmerstuffProcessor& p)
         "Level of the extra voices over time. Negative: they die away. Positive: they swell toward the main echo. Needs Voices above 1.",
         "How far the voices drift in time, up to 6 ms. 0 is off.",
         "Speed of that drift. Only matters with Wander or Voices.",
-        "Smears the input so a click becomes a soft swish before it echoes. 0 is off." };
-    const juce::Colour dcol[15] = { col::mint, col::mint, col::yellow, col::yellow, col::blue, col::pink, col::mint, col::mint, col::mint, col::mint, col::mint, col::mint, col::mint, col::mint, col::mint };
-    for (int i = 0; i < 15; ++i) dk[i].init(*this, a, dks[i].id, dks[i].name, dks[i].k, dcol[i], dtip[i]);
+        "Smears the input so a click becomes a soft swish before it echoes. 0 is off.",
+        "Level of the whole delay. Push it to bring the echoes forward in the mix.",
+        "Smear: softens each repeat so the echoes blur together. 0 is off.",
+        "How far the repeats wobble in pitch and time (Modulated delay, and a little in Tape).",
+        "Speed of that wobble, in Hz.",
+        "Ducker: the echoes dip while you play and swell back in the gaps. 0 is off.",
+        "Ducker threshold: how loud the input must be before the echoes dip. Lower dips more easily." };
+    const juce::Colour dcol[21] = { col::mint, col::mint, col::yellow, col::yellow, col::blue, col::pink, col::mint, col::mint, col::mint, col::mint, col::mint, col::mint, col::mint, col::mint, col::mint, col::pink, col::mint, col::mint, col::mint, col::mint, col::mint };
+    for (int i = 0; i < 21; ++i) dk[i].init(*this, a, dks[i].id, dks[i].name, dks[i].k, dcol[i], dtip[i]);
+    dk[18].s.textFromValueFunction = [](double v) { return juce::String(v, 2) + " Hz"; };
+    dk[18].s.valueFromTextFunction = [](const juce::String& t) { return t.retainCharacters("0123456789.").getDoubleValue(); };
+    dk[18].s.onValueChange();
+    dType.init(*this, a, "dtype", "Type", juce::StringArray { "Studio", "Tape", "Pong", "Modulated", "Reverse" }, "Studio: clean. Tape: warm, darkening repeats with a little wobble. Pong: repeats bounce left and right. Modulated: chorused repeats. Reverse: each repeat plays backwards.");
+    holdTog.setClickingTogglesState(true); addAndMakeVisible(holdTog); holdTog.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff0f2a26)); holdTog.setColour(juce::TextButton::textColourOnId, col::mint);
+    holdTog.setTooltip("Hold: freezes the repeats so they loop forever. Release it and the delay carries on as before.");
+    aHold = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(a, "dhold", holdTog);
+
+    // modulation tab: the knobs follow the effect chosen in "Edit effect"
+    mType.init(*this, a, "m_type", "Edit effect", juce::StringArray { "Chorus", "Flanger", "Phaser", "Tremolo", "Pan", "Rotary", "Vibrato", "Detune" }, "Which effect the knobs on this tab edit. Every effect keeps its own settings; switch them on in Active effects to use them together.");
+    {
+        const char* mn[15] = { "Speed", "Depth", "Voices", "Stages", "Regen", "Pre-delay", "Diffusion", "Waveform", "Phase", "Spread", "Drive", "Min speed", "Max speed", "Doppler", "Detune" };
+        const Knob::Kind mkk[15] = { Knob::Plain, Knob::Pct, Knob::Int, Knob::Plain, Knob::Plain, Knob::Ms, Knob::Pct, Knob::Wave, Knob::Pct, Knob::Pct, Knob::Pct, Knob::Plain, Knob::Plain, Knob::Pct, Knob::Plain };
+        const char* mt[15] = { "How fast the effect moves, in Hz.", "How far it moves.", "Chorus: number of voices.", "Phaser: 4, 8 or 12 stages. More stages, deeper notches.", "Feedback. Negative flips the sound hollow.",
+            "Base delay time. Chorus, flanger and detune.", "Chorus: smears each voice for a softer shimmer.", "Shape of the movement: sine, triangle or square.", "Left and right offset of the movement. 0 is the same, 100 % is opposite.",
+            "Rotary: how wide the speakers spread.", "Rotary: how hard the amp is pushed.", "Rotary: the slow speed, in Hz.", "Rotary: the fast speed, in Hz.", "Rotary: pitch wobble from the moving horn.", "Detune: how many cents sharp and flat the copies are." };
+        const juce::Colour mc[15] = { col::pink, col::pink, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::yellow, col::yellow, col::blue, col::blue, col::blue, col::blue, col::blue, col::mint };
+        for (int i = 0; i < 15; ++i) mk[i].init(*this, a, ssp::modId(0, i), mn[i], mkk[i], mc[i], mt[i]);
+        auto fmt = [](Knob& k, std::function<juce::String(double)> f, bool num) { k.s.textFromValueFunction = f; if (num) k.s.valueFromTextFunction = [](const juce::String& t) { return t.retainCharacters("0123456789.-").getDoubleValue(); }; k.s.onValueChange(); };
+        fmt(mk[0], [](double v) { return juce::String(v, 2) + " Hz"; }, true);
+        fmt(mk[3], [](double v) { return v < 0.5 ? juce::String("4") : v < 1.5 ? juce::String("8") : juce::String("12"); }, true);
+        fmt(mk[4], [](double v) { return (v > 0.004 ? "+" : "") + juce::String(juce::roundToInt(v * 100.0)) + " %"; }, true);
+        fmt(mk[11], [](double v) { return juce::String(v, 2) + " Hz"; }, true); fmt(mk[12], [](double v) { return juce::String(v, 2) + " Hz"; }, true);
+        fmt(mk[14], [](double v) { return juce::String(juce::roundToInt(v)) + " ct"; }, true);
+        mk[4].s.valueFromTextFunction = [](const juce::String& t) { return t.retainCharacters("0123456789.-").getDoubleValue() / 100.0; };
+        mMix.init(*this, a, "m_mix", "Mix", Knob::Pct, col::pink, "How much of the modulated sound replaces the dry. Effects like tremolo and pan always work on the whole signal.");
+        mLevel.init(*this, a, "m_level", "Level", Knob::Db, col::pink, "Level of the modulation wet signal. Push it to bring the effect forward.");
+    }
+    modOn.setClickingTogglesState(true); addAndMakeVisible(modOn); modOn.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff2a1020)); modOn.setColour(juce::TextButton::textColourOnId, col::pink);
+    modOn.setTooltip("Switches the modulation on or off. Same switch as the power icon on the Modulation box in FX and Routing.");
+    aModOn = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(a, "mod_on", modOn);
+    { static const char* mn8[8] = { "CHORUS", "FLANGER", "PHASER", "TREMOLO", "PAN", "ROTARY", "VIBRATO", "DETUNE" };
+      for (int i = 0; i < 8; ++i)
+      {
+          chip[i].setButtonText(mn8[i]); chip[i].setClickingTogglesState(true); addAndMakeVisible(chip[i]);
+          chip[i].setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff2a1020)); chip[i].setColour(juce::TextButton::textColourOnId, col::pink);
+          chip[i].setTooltip(juce::String("Use ") + juce::String(mn8[i]).toLowerCase() + " in the chain. Use Edit effect to change its settings. Effects run in this order, one after another.");
+          aChip[i] = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(a, ssp::modOnId(i), chip[i]);
+      } }
     const K iks[4] = { { "i_hp", "Input HP", Knob::Hz }, { "i_lp", "Input LP", Knob::Hz }, { "i_drive", "Drive", Knob::Db }, { "i_mix", "Sat mix", Knob::Pct } };
     const char* itip[4] = { "Cuts lows before they reach the effects.", "Cuts highs before they reach the effects.", "Saturation on the signal that feeds the effects. Antialiased.", "Dry/wet of the input saturation. 0 is off." };
     const juce::Colour icol[4] = { col::blue, col::blue, col::yellow, col::pink };
@@ -817,11 +934,11 @@ Body::Body(ShimmerstuffProcessor& p)
     dukn[2].s.textFromValueFunction = [](double v) { return juce::String(v, 2) + " Hz"; };
     dukn[2].s.valueFromTextFunction = [](const juce::String& t) { return t.retainCharacters("0123456789.").getDoubleValue(); };
     dukn[2].s.onValueChange();
-    static const char* onIds[4] = { "rev_on", "del_on", "ifx_on", "wfx_on" }; static const char* onNm[4] = { "REVERB", "DELAY", "INPUT FX", "WET FX" };
-    for (int i = 0; i < 4; ++i)
+    static const char* onIds[5] = { "rev_on", "del_on", "mod_on", "ifx_on", "wfx_on" }; static const char* onNm[5] = { "REVERB", "DELAY", "MODULATION", "INPUT FX", "WET FX" };
+    for (int i = 0; i < 5; ++i)
     {
         onBtn[i].setButtonText(onNm[i]); onBtn[i].setClickingTogglesState(true); addAndMakeVisible(onBtn[i]); onBtn[i].setTooltip(juce::String("Switch ") + onNm[i] + " on or off in the routing.");
-        onBtn[i].setColour(juce::TextButton::buttonOnColourId, col::sel); onBtn[i].setColour(juce::TextButton::textColourOnId, i == 2 ? col::blue : i == 3 ? col::yellow : i == 1 ? col::mint : col::lilac);
+        onBtn[i].setColour(juce::TextButton::buttonOnColourId, col::sel); onBtn[i].setColour(juce::TextButton::textColourOnId, i == 3 ? col::blue : i == 4 ? col::yellow : i == 1 ? col::mint : i == 2 ? col::pink : col::lilac);
         aOn[i] = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(a, onIds[i], onBtn[i]);
     }
     for (auto* b : { &revOn, &delOn })
@@ -831,7 +948,7 @@ Body::Body(ShimmerstuffProcessor& p)
     aRev = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(a, "rev_on", revOn); aDel = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(a, "del_on", delOn);
     turnOn.onClick = [this]
     {
-        const char* id = tab == 0 ? "rev_on" : "del_on"; gesture(proc, id, true); setNorm(proc, id, 1.f); gesture(proc, id, false);
+        const char* id = tabOnId(tab); if (id == nullptr) return; gesture(proc, id, true); setNorm(proc, id, 1.f); gesture(proc, id, false);
     };
     refreshMainPresets();
     setTab(0);
@@ -845,22 +962,22 @@ std::vector<float> Body::snapshot(int t) const
     std::vector<float> v;
     for (auto* k : keysOf(t))
     {
-        if (t < 2 && (juce::String(k) == "rev_on" || juce::String(k) == "del_on")) continue;      // the on/off switch is not part of a tab preset's identity
+        if (t < 3 && (juce::String(k) == "rev_on" || juce::String(k) == "del_on" || juce::String(k) == "mod_on")) continue;      // the on/off switch is not part of a tab preset's identity
         v.push_back(getNorm(proc, k));
     }
-    if (t == 2 && (int) proc.get("route") >= ShimmerstuffProcessor::kLayouts) v.push_back((float) (proc.getGraph().hashCode() & 0xffff));
+    if (t == 3 && (int) proc.get("route") >= ShimmerstuffProcessor::kLayouts) v.push_back((float) (proc.getGraph().hashCode() & 0xffff));
     return v;
 }
 int Body::matchFactory(int t) const
 {
-    const int n = proc.numTabPresets(t); const auto& list = t == 0 ? ssp::reverbPresets() : t == 1 ? ssp::delayPresets() : ssp::fxPresets();
+    const int n = proc.numTabPresets(t); const auto& list = t == 0 ? ssp::reverbPresets() : t == 1 ? ssp::delayPresets() : t == 2 ? ssp::modPresets() : ssp::fxPresets();
     for (int i = 0; i < n; ++i)
     {
         const auto& pre = list[(size_t) i]; bool ok = true;
         for (auto* k : keysOf(t))
         {
             const juce::String id(k);
-            if (t < 2 && (id == "rev_on" || id == "del_on")) continue;
+            if (t < 3 && (id == "rev_on" || id == "del_on" || id == "mod_on")) continue;
             auto* q = proc.apvts.getParameter(id); if (q == nullptr) continue;
             if (id == "route" && pre.graph != nullptr)
             {
@@ -923,7 +1040,7 @@ void Body::mainPresetChosen()
     const int id = mainCombo.getSelectedId();
     if (id >= 1000) { const size_t i = (size_t) (id - 1000); if (i < userMain.size()) if (auto xml = juce::XmlDocument::parse(userMain[i])) if (xml->hasTagName("STATE")) proc.applyUserPresetXml(*xml); }
     else if (id >= 1) proc.setCurrentProgram(id - 1);
-    for (int t = 0; t < 3; ++t) selLabel[t] = {};
+    for (int t = 0; t < 4; ++t) selLabel[t] = {};
     repaint();
 }
 static void askName(juce::Component* owner, const juce::String& title, const juce::String& msg, std::function<void(juce::String)> done)
@@ -988,6 +1105,8 @@ void Body::showGuide()
         "Shimmer Reverb, Shimmer Delay and FX & Routing are three views of one plugin. The routing you choose stays active whichever tab is open; the ON button on the Reverb and Delay tabs is the same switch as the power icon in the routing diagram.\n\n"
         "Decay: drag the yellow dot sideways for the decay and up or down for the size. Cyan: pre-delay. Blue: damping. Orange: shimmer. Pink: mix.\n"
         "Tone: the live spectrum with draggable filter lines.\n"
+        "Modulation: switch on any of the eight effects (they run one after another), pick one in Edit effect to change its settings.\n"
+        "Level knobs (reverb, delay, modulation): push the effect forward in the mix.\n"
         "Echoes: drag the first dot for Time and the second for Feedback.\n"
         "Routing: drag the boxes (between two columns for in series, onto a column for side by side). Hold a number in a box and drag up or down.\n\n"
         "Double-click any knob or dot to reset it. Hover for 1 second for info bubbles.", juce::MessageBoxIconType::NoIcon, this);
@@ -998,15 +1117,22 @@ void Body::showGuide()
 void Body::setTab(int t)
 {
     tab = t;
-    for (int i = 0; i < 3; ++i) tabBtn[i].setToggleState(i == t, juce::dontSendNotification);
-    const juce::Colour acc[3] = { col::lilac, col::mint, col::yellow };
-    for (int i = 0; i < 3; ++i) for (int j = 0; j < 2; ++j)
+    for (int i = 0; i < 4; ++i) tabBtn[i].setToggleState(i == t, juce::dontSendNotification);
+    const juce::Colour acc[4] = { col::lilac, col::mint, col::pink, col::yellow };
+    for (int i = 0; i < 4; ++i) for (int j = 0; j < 2; ++j)
     {
         subBtn[i][j].setVisible(i == t); subBtn[i][j].setToggleState(sub[i] == j, juce::dontSendNotification);
         subBtn[i][j].setColour(juce::TextButton::textColourOnId, acc[i]);
     }
     meter.tab = t;
+    if (t == 2) syncEdit();
     refreshTabPresets(); layoutTab(); repaint();
+}
+void Body::syncEdit()
+{
+    const int e = juce::jlimit(0, 7, (int) proc.get("m_type"));
+    if (e != shownEdit) { for (int i = 0; i < 15; ++i) mk[i].rebind(ssp::modId(e, i)); shownEdit = e; }
+    for (int i = 0; i < 15; ++i) mk[i].setAlpha(((kModUse[i] >> e) & 1) ? 1.f : 0.35f);
 }
 
 void Body::layoutTab()
@@ -1014,19 +1140,22 @@ void Body::layoutTab()
     const int L = 14, LW = 1072, bottom = 872, dispTop = 198;
     pPrev.setBounds(430, 18, 30, 34); tabCombo.setBounds(466, 18, 340, 34); pNext.setBounds(812, 18, 30, 34); pSave.setBounds(848, 18, 66, 34); pMore.setBounds(920, 18, 34, 34);
     bGuide.setBounds(978, 18, 66, 34); bSet.setBounds(1050, 18, 90, 34); bAbout.setBounds(1146, 18, 140, 34);
-    for (int i = 0; i < 3; ++i) tabBtn[i].setBounds(L + i * 277, 92, 273, 56);
+    for (int i = 0; i < 4; ++i) tabBtn[i].setBounds(L + i * 209, 92, 205, 56);
     mainCombo.setBounds(944, 100, 226, 36); mainSave.setBounds(1178, 96, 108, 44);
     for (int j = 0; j < 2; ++j) subBtn[tab][j].setBounds(L + j * 78, 162, j == 0 ? 74 : 62, 30);
     turnOn.setBounds(480, 172, 100, 22);
     meter.setBounds(1096, 162, 190, bottom - 162); peakReset.setBounds(1096 + 8, bottom - 40, 174, 32);
-    for (auto* v : { (juce::Component*) &decay, (juce::Component*) &toneRev, (juce::Component*) &toneDel, (juce::Component*) &toneFx, (juce::Component*) &echo, (juce::Component*) &route, (juce::Component*) &shape }) v->setVisible(false);
+    for (auto* v : { (juce::Component*) &decay, (juce::Component*) &toneRev, (juce::Component*) &toneDel, (juce::Component*) &toneFx, (juce::Component*) &toneMod, (juce::Component*) &modv, (juce::Component*) &echo, (juce::Component*) &route, (juce::Component*) &shape }) v->setVisible(false);
     for (auto& k : rk) k.setVisible(false);
     for (auto& k : dk) k.setVisible(false);
     for (auto& k : ik) k.setVisible(false);
     for (auto& k : wk) k.setVisible(false);
     for (auto& k : dukn) k.setVisible(false);
-    for (auto* c : { &rType, &rMode, &lay, &dMode, &dSrc, &dRatio }) c->setVisible(false);
-    shimTog.setVisible(false);
+    for (auto& k : mk) k.setVisible(false);
+    mMix.setVisible(false); mLevel.setVisible(false);
+    for (auto* c : { &rType, &rMode, &lay, &dMode, &dSrc, &dRatio, &dType, &mType }) c->setVisible(false);
+    shimTog.setVisible(false); holdTog.setVisible(false); modOn.setVisible(false);
+    for (auto& b : chip) b.setVisible(false);
     for (auto& b : onBtn) b.setVisible(false);
     revOn.setVisible(false); delOn.setVisible(false);
     panels.clear();
@@ -1040,34 +1169,60 @@ void Body::layoutTab()
         panels.push_back({ { L, p1, LW, rowH }, 1, "SPACE", "type and size of the room" });
         panels.push_back({ { L, p2, 532, rowH }, 2, "SHIMMER", "pitch shifted copy fed into the tail" });
         panels.push_back({ { L + 540, p2, 532, rowH }, 3, "TONE AND MIX", "what reaches the output" });
-        panels.push_back({ { L, p3, LW, rowH }, 4, "LEXICAT", "our second reverb engine, runs side by side with the type above" });
+        panels.push_back({ { L, p3, LW, rowH }, 4, "LEXICAT AND LEVEL", "our second reverb engine, plus the level of the whole reverb" });
         place(revOn, L + LW - 78, p1 + 6, 66, 24);
-        place(rType, L + 12, p1 + 44, 132, 52); knobRow(rk, 5, L + 160, p1 + 32, 100);
+        place(rType, L + 12, p1 + 44, 132, 52); knobRow(rk, 5, L + 160, p1 + 32, 100); place(rk[23], L + 160 + 500, p1 + 32, 100, 76);
         place(shimTog, L + 532 - 130, p2 + 6, 118, 24);
         knobRow(rk + 5, 4, L + 16, p2 + 32, 100); knobRow(rk + 9, 4, L + 540 + 16, p2 + 32, 100);
-        place(rMode, L + 12, p3 + 44, 132, 52); knobRow(rk + 13, 9, L + 160, p3 + 32, 100);
+        place(rMode, L + 12, p3 + 44, 132, 52); knobRow(rk + 13, 9, L + 160, p3 + 32, 88); place(rk[22], L + 160 + 9 * 88, p3 + 32, 88, 76);
     }
     else if (tab == 1)
     {
-        const int rowH = 120, pB = bottom - rowH, p1 = pB - 8 - rowH, w3 = (LW - 16) / 3;
+        const int rowH = 104, pC = bottom - rowH, pB = pC - 8 - rowH, p1 = pB - 8 - rowH, w3 = (LW - 16) / 3;
         if (sub[1] == 0) echo.setVisible(true); else toneDel.setVisible(true);
         echo.setBounds(L, dispTop, LW, p1 - 8 - dispTop); toneDel.setBounds(echo.getBounds());
-        panels.push_back({ { L, p1, w3, rowH }, 1, "ECHO", "timing and repeats" }); panels.push_back({ { L + w3 + 8, p1, w3, rowH }, 2, "SHIMMER", "pitch of the repeats" }); panels.push_back({ { L + 2 * (w3 + 8), p1, w3, rowH }, 3, "TONE AND MIX", "what reaches the output" });
+        panels.push_back({ { L, p1, w3, rowH }, 1, "ECHO", "timing and repeats" }); panels.push_back({ { L + w3 + 8, p1, w3, rowH }, 2, "SHIMMER", "pitch of the repeats" }); panels.push_back({ { L + 2 * (w3 + 8), p1, w3, rowH }, 3, "TONE, MIX AND LEVEL", "" });
         panels.push_back({ { L, pB, LW, rowH }, 4, "VOICES AND MOVEMENT", "cross feedback, width, extra voices, drift and diffusion" });
+        panels.push_back({ { L, pC, LW, rowH }, 5, "CHARACTER", "echo type, hold, smear, wobble and ducker" });
         place(delOn, L + w3 - 78, p1 + 6, 66, 24);
-        knobRow(dk, 2, L + 16, p1 + 38, 110); knobRow(dk + 2, 2, L + w3 + 8 + 16, p1 + 38, 110); knobRow(dk + 4, 2, L + 2 * (w3 + 8) + 16, p1 + 38, 110);
-        knobRow(dk + 6, 9, L + 16, pB + 38, 114);
+        knobRow(dk, 2, L + 16, p1 + 28, 110); knobRow(dk + 2, 2, L + w3 + 8 + 16, p1 + 28, 110);
+        place(dk[4], L + 2 * (w3 + 8) + 8, p1 + 28, 108, 76); place(dk[5], L + 2 * (w3 + 8) + 8 + 112, p1 + 28, 108, 76); place(dk[15], L + 2 * (w3 + 8) + 8 + 224, p1 + 28, 108, 76);
+        knobRow(dk + 6, 9, L + 16, pB + 28, 114);
+        place(dType, L + 12, pC + 38, 132, 52); place(holdTog, L + 156, pC + 50, 80, 30);
+        place(dk[16], L + 260, pC + 28, 110, 76); place(dk[17], L + 260 + 120, pC + 28, 110, 76); place(dk[18], L + 260 + 240, pC + 28, 110, 76);
+        place(dk[19], L + 260 + 400, pC + 28, 110, 76); place(dk[20], L + 260 + 520, pC + 28, 110, 76);
+    }
+    else if (tab == 2)
+    {
+        const int h12 = 112, h3 = 84, p3 = bottom - h3, p2 = p3 - 8 - h12, p1 = p2 - 8 - h12, wl = 572, wr = LW - wl - 8;
+        if (sub[2] == 0) modv.setVisible(true); else toneMod.setVisible(true);
+        modv.setBounds(L, dispTop, LW, p1 - 8 - dispTop); toneMod.setBounds(modv.getBounds());
+        panels.push_back({ { L, p1, LW, h12 }, 1, "EFFECT", "the effect you edit here; every effect keeps its own settings" });
+        panels.push_back({ { L, p2, wl, h12 }, 2, "CHORUS, FLANGER, PHASER, DETUNE", "" });
+        panels.push_back({ { L + wl + 8, p2, wr, h12 }, 3, "ROTARY SPEAKER", "" });
+        panels.push_back({ { L, p3, LW, h3 }, 4, "ACTIVE EFFECTS", "switch on as many as you like; they run in this order" });
+        place(modOn, L + LW - 78, p1 + 6, 66, 24);
+        place(mType, L + 12, p1 + 44, 132, 52);
+        const int order[4] = { 0, 1, 7, 8 };
+        for (int i = 0; i < 4; ++i) place(mk[order[i]], L + 160 + i * 100, p1 + 32, 100, 76);
+        place(mMix, L + 160 + 400, p1 + 32, 100, 76); place(mLevel, L + 160 + 500, p1 + 32, 100, 76);
+        const int ch[6] = { 2, 3, 4, 5, 6, 14 };
+        for (int i = 0; i < 6; ++i) place(mk[ch[i]], L + 16 + i * 90, p2 + 32, 90, 76);
+        const int ro[5] = { 10, 11, 12, 13, 9 };
+        for (int i = 0; i < 5; ++i) place(mk[ro[i]], L + wl + 8 + 16 + i * 90, p2 + 32, 90, 76);
+        for (int i = 0; i < 8; ++i) place(chip[i], L + 16 + i * 128, p3 + 38, 120, 36);
+        syncEdit();
     }
     else
     {
         const int r2 = 124, r2y = bottom - r2, r1 = 196, r1y = r2y - 8 - r1, w3 = (LW - 16) / 3;
-        if (sub[2] == 0) route.setVisible(true); else toneFx.setVisible(true);
+        if (sub[3] == 0) route.setVisible(true); else toneFx.setVisible(true);
         route.setBounds(L, dispTop, LW, r1y - 8 - dispTop); toneFx.setBounds(route.getBounds());
         panels.push_back({ { L, r1y, w3, r1 }, 1, "ROUTING", "drag the boxes in the diagram" }); panels.push_back({ { L + w3 + 8, r1y, w3, r1 }, 2, "INPUT FX", "before the reverb and delay" });
         panels.push_back({ { L + 2 * (w3 + 8), r1y, w3, r1 }, 3, "WET SATURATION AND LEVEL", "" });
         panels.push_back({ { L, r2y, w3, r2 }, 4, "SQUASH", "lifts quiet tails, tames loud ones" }); panels.push_back({ { L + w3 + 8, r2y, 2 * w3 + 8, r2 }, 5, "DUCK", "the effect dips, then swells back" });
         place(lay, L + 12, r1y + 34, w3 - 24, 46);
-        for (int i = 0; i < 4; ++i) place(onBtn[i], L + 12 + (i % 2) * 150, r1y + 92 + (i / 2) * 44, 142, 34);
+        for (int i = 0; i < 5; ++i) place(onBtn[i], L + 12 + (i % 3) * 112, r1y + 92 + (i / 3) * 44, 106, 34);
         const int ix = L + w3 + 8 + 8, wx = L + 2 * (w3 + 8) + 8, cw = (w3 - 16) / 3;
         for (int i = 0; i < 3; ++i) place(ik[i], ix + i * cw, r1y + 32, cw, 76);
         place(ik[3], ix, r1y + 112, cw, 76);
@@ -1092,6 +1247,8 @@ void Body::tickFrame()
     if (toneRev.isVisible()) toneRev.tick();
     if (toneDel.isVisible()) toneDel.tick();
     if (toneFx.isVisible()) toneFx.tick();
+    if (toneMod.isVisible()) toneMod.tick();
+    if (modv.isVisible()) modv.repaint();
     meter.rt60 = decay.rt60Seconds(); meter.tick();
     if (echo.isVisible()) echo.repaint();
     if (route.isVisible()) route.repaint();
@@ -1099,15 +1256,18 @@ void Body::tickFrame()
     if ((slow++ % 6) == 0)
     {
         updateTabComboText();
-        if (tab == 2) { const int m = (int) proc.get("w_dmode"); dukn[1].setVisible(m == 0); dukn[2].setVisible(m == 1); dRatio.setVisible(m == 2); shape.setVisible(m != 0); }
+        if (tab == 2) syncEdit();
+        if (tab == 3) { const int m = (int) proc.get("w_dmode"); dukn[1].setVisible(m == 0); dukn[2].setVisible(m == 1); dRatio.setVisible(m == 2); shape.setVisible(m != 0); }
         if (tab == 0)
         {
             const bool sh = decay.shimmerOn(); for (int i = 5; i < 9; ++i) rk[i].setAlpha(sh ? 1.f : 0.4f);
             rk[4].setAlpha((int) proc.get("type") == 2 ? 1.f : 0.35f);
+            { const int ty = (int) proc.get("type"); rk[23].setAlpha(ty >= 6 ? 1.f : 0.35f);
+              rk[23].name.setText(juce::String(ty == 7 ? "Hold" : ty == 8 ? "Length" : ty == 6 ? "Boing" : "Special").toUpperCase(), juce::dontSendNotification); }
             const bool lx = proc.get("lexmix") > 0.001f; for (int i = 14; i < 22; ++i) rk[i].setAlpha(lx ? 1.f : 0.35f); rMode.setAlpha(lx ? 1.f : 0.35f);
             shimTog.setAlpha(1.f);
         }
-        const bool off = (tab == 0 && proc.get("rev_on") < .5f) || (tab == 1 && proc.get("del_on") < .5f);
+        const char* oid = tabOnId(tab); const bool off = oid != nullptr && proc.get(oid) < .5f;
         if (turnOn.isVisible() != off) turnOn.setVisible(off);
         repaint(14, 150, IW - 28, 48);
     }
@@ -1132,15 +1292,15 @@ void Body::paint(juce::Graphics& g)
     }
     {
         const auto gr = wm::fx::parseGraph(proc.getGraph().toStdString()); juce::String sig = "Signal: ";
-        static const char* nm[4] = { "Input FX", "Reverb", "Delay", "Wet FX" }; static const char* on[4] = { "ifx_on", "rev_on", "del_on", "wfx_on" };
+        static const char* nm[5] = { "Input FX", "Reverb", "Delay", "Wet FX", "Modulation" }; static const char* on[5] = { "ifx_on", "rev_on", "del_on", "wfx_on", "mod_on" };
         for (int s = 0; s < gr.stages; ++s)
         {
             if (s) sig << " > ";
-            for (int j = 0; j < gr.count[s]; ++j) { const int n = gr.items[s][j] & 3; if (j) sig << " | "; sig << nm[n] << (proc.get(on[n]) > .5f ? "" : " (off)"); }
+            for (int j = 0; j < gr.count[s]; ++j) { const int n = juce::jlimit(0, 4, gr.items[s][j]); if (j) sig << " | "; sig << nm[n] << (proc.get(on[n]) > .5f ? "" : " (off)"); }
         }
         g.setColour(col::dim); g.setFont(font(13.f, false, 0.03f)); g.drawText(sig, 600, 168, 484, 20, juce::Justification::right);
-        const bool off = (tab == 0 && proc.get("rev_on") < .5f) || (tab == 1 && proc.get("del_on") < .5f);
-        if (off) { g.setColour(juce::Colour(0xffff7bb1)); g.setFont(font(13.f, false, 0.03f)); g.drawText(tab == 0 ? "The reverb is switched off in the routing." : "The delay is switched off in the routing.", 330, 152, 300, 18, juce::Justification::left); }
+        const char* oid = tabOnId(tab); const bool off = oid != nullptr && proc.get(oid) < .5f;
+        if (off) { g.setColour(juce::Colour(0xffff7bb1)); g.setFont(font(13.f, false, 0.03f)); g.drawText(tab == 0 ? "The reverb is switched off in the routing." : tab == 1 ? "The delay is switched off in the routing." : "The modulation is switched off in the routing.", 330, 152, 300, 18, juce::Justification::left); }
     }
     g.setColour(col::line); g.drawHorizontalLine(884, 14.f, (float) IW - 14.f);
     g.setColour(col::ink); g.setFont(font(12.f, true, 0.16f)); g.drawText("STUDIO 87", 14, 892, 80, 18, juce::Justification::left);

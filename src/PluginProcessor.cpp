@@ -4,16 +4,18 @@
 using APVTS = juce::AudioProcessorValueTreeState;
 using namespace wm;
 
-const juce::StringArray& ShimmerstuffProcessor::typeNames() { static const juce::StringArray n { "Plate", "Hall", "Velvet" }; return n; }
+const juce::StringArray& ShimmerstuffProcessor::typeNames() { static const juce::StringArray n { "Plate", "Hall", "Velvet", "Room", "Chamber", "Arena", "Spring", "Gated", "Reverse" }; return n; }
 const char* ShimmerstuffProcessor::layoutGraph(int i)
 {
-    static const char* g[kLayouts] = { "ifx>rev>del>wfx", "ifx>del>rev>wfx", "ifx>rev|del>wfx", "ifx>rev>wfx>del", "ifx>del>wfx>rev", "rev>del>wfx>ifx", "wfx>ifx>rev>del", "rev|del|ifx|wfx" };
+    static const char* g[kLayouts] = { "ifx>rev|del|mod>wfx", "ifx>rev>del>mod>wfx", "ifx>mod>rev>del>wfx", "ifx>del>rev>mod>wfx", "ifx>rev|del>mod>wfx", "ifx>rev>mod>wfx>del", "ifx>del>mod>wfx>rev",
+        "rev>del>mod>wfx>ifx", "wfx>ifx>mod>rev>del", "rev|del|mod|ifx|wfx" };
     return g[juce::jlimit(0, kLayouts - 1, i)];
 }
 const juce::StringArray& ShimmerstuffProcessor::layoutNames()
 {
-    static const juce::StringArray n { "FX, Reverb, Delay, Wet FX", "FX, Delay, Reverb, Wet FX", "FX, Reverb and Delay in parallel, Wet FX", "FX, Reverb, Wet FX, Delay", "FX, Delay, Wet FX, Reverb (FX between)",
-        "Reverb, Delay, Wet FX, then FX", "Wet FX first, then FX, Reverb, Delay", "Everything in parallel", "Custom (your own)" };
+    static const juce::StringArray n { "FX, Reverb, Delay and Modulation side by side, Wet FX", "FX, Reverb, Delay, Modulation, Wet FX", "FX, Modulation, Reverb, Delay, Wet FX", "FX, Delay, Reverb, Modulation, Wet FX",
+        "FX, Reverb and Delay in parallel, Modulation, Wet FX", "FX, Reverb, Modulation, Wet FX, Delay", "FX, Delay, Modulation, Wet FX, Reverb (FX between)", "Reverb, Delay, Modulation, Wet FX, then FX",
+        "Wet FX first, then FX, Modulation, Reverb, Delay", "Everything in parallel", "Custom (your own)" };
     return n;
 }
 const juce::StringArray& ShimmerstuffProcessor::ratioNames() { static const juce::StringArray n { "1/16", "1/8", "1/4", "1/2", "1 bar", "2 bars", "4 bars" }; return n; }
@@ -47,7 +49,28 @@ const F kFloats[] = {
     { "dtap2", "Delay second voice", 0.f, 1.f, 0.f, 0.f }, { "dratio2", "Second voice time", 0.25f, 1.5f, 0.5f, 0.f },
     { "dvoices", "Delay voices", 1.f, 8.f, 1.f, 0.f }, { "dslope", "Delay slope", -1.f, 1.f, 0.f, 0.f }, { "dwander", "Delay wander", 0.f, 1.f, 0.f, 0.f },
     { "dspin", "Delay spin", 0.f, 1.f, 0.5f, 0.f }, { "ddiff", "Delay diffusion", 0.f, 1.f, 0.f, 0.f },
+    // reverb types, delay character, modulation chain and the three Level knobs (dB, 0 = as before)
+    { "rspec", "Reverb special", 0.f, 1.f, 0.5f, 0.f }, { "rlevel", "Reverb level", -12.f, 12.f, 0.f, 0.f }, { "dlevel", "Delay level", -12.f, 12.f, 0.f, 0.f }, { "m_level", "Modulation level", -12.f, 12.f, 0.f, 0.f },
+    { "dduck", "Delay ducker", 0.f, 1.f, 0.f, 0.f }, { "dthr", "Ducker threshold", 0.f, 1.f, 0.3f, 0.f }, { "dsmear", "Delay smear", 0.f, 1.f, 0.f, 0.f },
+    { "dmod", "Delay mod depth", 0.f, 1.f, 0.5f, 0.f }, { "drate", "Delay mod rate", 0.1f, 8.f, 0.8f, 1.f }, { "m_mix", "Modulation mix", 0.f, 1.f, 1.f, 0.f },
 };
+// Per effect settings of the modulation chain: ids m0_speed ... m7_shift. Order of the effects: Chorus, Flanger, Phaser, Tremolo, Pan, Rotary, Vibrato, Detune.
+struct MF { const char* key; const char* name; float lo, hi, mid; int kind; };   // kind 0 float, 1 int
+const MF kModF[ShimmerstuffProcessor::kModKeys] = {
+    { "speed", "speed", 0.05f, 20.f, 1.5f, 0 }, { "depth", "depth", 0.f, 1.f, 0.f, 0 }, { "voices", "voices", 1.f, 4.f, 0.f, 1 }, { "stages", "stages", 0.f, 2.f, 0.f, 1 },
+    { "regen", "regen", -0.9f, 0.9f, 0.f, 0 }, { "pre", "pre-delay", 0.f, 20.f, 0.f, 0 }, { "diff", "diffusion", 0.f, 1.f, 0.f, 0 }, { "wave", "waveform", 0.f, 2.f, 0.f, 1 },
+    { "phase", "phase", 0.f, 1.f, 0.f, 0 }, { "spread", "spread", 0.f, 1.f, 0.f, 0 }, { "drive", "drive", 0.f, 1.f, 0.f, 0 }, { "min", "min speed", 0.2f, 4.f, 0.f, 0 },
+    { "max", "max speed", 2.f, 12.f, 0.f, 0 }, { "dop", "doppler", 0.f, 1.f, 0.f, 0 }, { "shift", "detune", 0.f, 50.f, 0.f, 0 } };
+const float kModBase[ShimmerstuffProcessor::kModKeys] = { 0.8f, 0.5f, 2.f, 1.f, 0.f, 3.f, 0.f, 0.f, 0.5f, 0.7f, 0.2f, 0.8f, 6.5f, 0.5f, 12.f };
+float modDefault(int t, int k)
+{
+    struct O { int t, k; float v; };
+    static const O o[] = { { 1, 0, 0.25f }, { 1, 1, 0.8f }, { 1, 4, 0.5f }, { 1, 5, 1.f }, { 2, 0, 0.3f }, { 2, 1, 0.7f }, { 2, 4, 0.4f }, { 3, 0, 4.f }, { 3, 1, 0.6f }, { 4, 0, 0.5f }, { 4, 1, 1.f },
+        { 6, 0, 5.f }, { 6, 1, 0.4f }, { 7, 5, 12.f } };
+    for (const auto& e : o) if (e.t == t && e.k == k) return e.v;
+    return kModBase[k];
+}
+const char* const kModNames[8] = { "Chorus", "Flanger", "Phaser", "Tremolo", "Pan", "Rotary", "Vibrato", "Detune" };
 
 }
 
@@ -56,6 +79,8 @@ APVTS::ParameterLayout ShimmerstuffProcessor::layout()
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
     p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "type", 1 }, "Reverb type", typeNames(), 1));
     p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{ "shim_on", 1 }, "Shimmer on", true));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "dtype", 1 }, "Delay type", juce::StringArray { "Studio", "Tape", "Pong", "Modulated", "Reverse" }, 0));
+    p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "m_type", 1 }, "Modulation: effect being edited", juce::StringArray(kModNames, 8), 0));
     p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "lexmode", 1 }, "Lexicat mode", juce::StringArray { "Hall", "Random Hall", "Plate", "Chamber", "Room" }, 0));
     for (const auto& f : kFloats)
     {
@@ -70,32 +95,34 @@ APVTS::ParameterLayout ShimmerstuffProcessor::layout()
     p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "w_dratio", 1 }, "Duck ratio", ratioNames(), 2));
     struct B { const char* id; const char* name; bool def; };
     p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "route", 1 }, "Routing layout", layoutNames(), 0));
-    static const B bools[] = { { "rev_on", "Reverb on", true }, { "del_on", "Delay on", false }, { "ifx_on", "Input FX on", true }, { "wfx_on", "Wet FX on", true }, { "byp", "Bypass", false } };
+    for (int t = 0; t < 8; ++t)
+    {
+        p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{ juce::String("mo") + juce::String(t), 1 }, juce::String(kModNames[t]) + " on", t == 0));
+        for (int k = 0; k < kModKeys; ++k)
+        {
+            const auto& m = kModF[k]; const juce::String id = "m" + juce::String(t) + "_" + m.key, nm = juce::String(kModNames[t]) + " " + m.name;
+            if (m.kind == 1) p.push_back(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{ id, 1 }, nm, (int) m.lo, (int) m.hi, (int) modDefault(t, k)));
+            else { juce::NormalisableRange<float> r(m.lo, m.hi); if (m.mid > 0.f) r.setSkewForCentre(m.mid); p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{ id, 1 }, nm, r, modDefault(t, k))); }
+        }
+    }
+    static const B bools[] = { { "rev_on", "Reverb on", true }, { "del_on", "Delay on", false }, { "ifx_on", "Input FX on", true }, { "wfx_on", "Wet FX on", true }, { "mod_on", "Modulation on", false }, { "dhold", "Delay hold", false }, { "byp", "Bypass", false } };
     for (const auto& b : bools)
         p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{ b.id, 1 }, b.name, b.def));
     return { p.begin(), p.end() };
 }
 
+// The graph is stored in one number: for each of the five nodes, its stage (3 bits) and its place inside the stage (3 bits).
 static uint64_t encodeGraph(const fx::Graph& g)
 {
-    uint64_t c = ~uint64_t(0);
-    for (int s = 0; s < 4; ++s) for (int j = 0; j < 4; ++j)
-    {
-        const uint64_t nib = (s < g.stages && j < g.count[s]) ? uint64_t(g.items[s][j]) : 15u;
-        c &= ~(uint64_t(15) << (4 * (s * 4 + j))); c |= nib << (4 * (s * 4 + j));
-    }
+    uint64_t c = 0;
+    for (int s = 0; s < g.stages; ++s) for (int j = 0; j < g.count[s]; ++j) { const int n = g.items[s][j]; c |= uint64_t(s | (j << 3)) << (6 * n); }
     return c;
 }
 static fx::Graph decodeGraph(uint64_t c)
 {
-    fx::Graph g;
-    for (int s = 0; s < 4; ++s)
-    {
-        int n = 0;
-        for (int j = 0; j < 4; ++j) { const int nib = int((c >> (4 * (s * 4 + j))) & 15u); if (nib < 4) g.items[s][n++] = nib; }
-        if (n > 0) g.count[g.stages++] = n; else if (s < 4) { /* skip empty stage */ }
-    }
-    // compact stages (an empty stage in the middle is skipped above because count stays 0)
+    fx::Graph g; int cnt[fx::kNumNodes] = {}, item[fx::kNumNodes][fx::kNumNodes] = {};
+    for (int n = 0; n < fx::kNumNodes; ++n) { const int s = int((c >> (6 * n)) & 7u), j = int((c >> (6 * n + 3)) & 7u); if (s < fx::kNumNodes && j < fx::kNumNodes) { item[s][j] = n; cnt[s] = std::max(cnt[s], j + 1); } }
+    for (int s = 0; s < fx::kNumNodes; ++s) if (cnt[s] > 0) { for (int j = 0; j < cnt[s]; ++j) g.items[g.stages][j] = item[s][j]; g.count[g.stages++] = cnt[s]; }
     return g;
 }
 
@@ -107,6 +134,11 @@ ShimmerstuffProcessor::ShimmerstuffProcessor()
 {
     for (int i = 0; i < kLayouts; ++i) layoutCode[i] = encodeGraph(fx::parseGraph(layoutGraph(i)));
     graphCode.store(layoutCode[0]);
+    for (int t = 0; t < 8; ++t)
+    {
+        modOnP[t] = apvts.getRawParameterValue("mo" + juce::String(t));
+        for (int k = 0; k < kModKeys; ++k) modP[t][k] = apvts.getRawParameterValue("m" + juce::String(t) + "_" + kModF[k].key);
+    }
     for (auto& t : tapIn) t.store(0.f);
     for (auto& t : tapOut) t.store(0.f);
 }
@@ -153,18 +185,21 @@ void ShimmerstuffProcessor::applyKeys(const std::vector<const char*>& keys, cons
     for (const auto& kv : p->v) setParam(kv.first, kv.second);
     if (p->graph != nullptr) setGraph(p->graph);
 }
-int ShimmerstuffProcessor::numTabPresets(int tab) const { return (int) (tab == 0 ? ssp::reverbPresets() : tab == 1 ? ssp::delayPresets() : ssp::fxPresets()).size(); }
+static const std::vector<ssp::Pre>& tabList(int tab) { return tab == 0 ? ssp::reverbPresets() : tab == 1 ? ssp::delayPresets() : tab == 2 ? ssp::modPresets() : ssp::fxPresets(); }
+static const std::vector<const char*>& tabKeys(int tab) { return tab == 0 ? ssp::reverbKeys() : tab == 1 ? ssp::delayKeys() : tab == 2 ? ssp::modKeys() : ssp::fxKeys(); }
+int ShimmerstuffProcessor::numTabPresets(int tab) const { return (int) tabList(juce::jlimit(0, 3, tab)).size(); }
 juce::String ShimmerstuffProcessor::tabPresetName(int tab, int i) const
 {
-    const auto& l = tab == 0 ? ssp::reverbPresets() : tab == 1 ? ssp::delayPresets() : ssp::fxPresets();
+    const auto& l = tabList(juce::jlimit(0, 3, tab));
     return juce::isPositiveAndBelow(i, (int) l.size()) ? l[(size_t) i].name : "";
 }
 void ShimmerstuffProcessor::applyTabPreset(int tab, int i)
 {
-    const auto& l = tab == 0 ? ssp::reverbPresets() : tab == 1 ? ssp::delayPresets() : ssp::fxPresets();
-    if (!juce::isPositiveAndBelow(i, (int) l.size()) || tab < 0 || tab > 2) return;
+    if (tab < 0 || tab > 3) return;
+    const auto& l = tabList(tab);
+    if (!juce::isPositiveAndBelow(i, (int) l.size())) return;
     lastTabPreset[tab] = i;
-    applyKeys(tab == 0 ? ssp::reverbKeys() : tab == 1 ? ssp::delayKeys() : ssp::fxKeys(), &l[(size_t) i], tab == 2);
+    applyKeys(tabKeys(tab), &l[(size_t) i], tab == 3);
 }
 int ShimmerstuffProcessor::numMainPresets() const { return (int) ssp::mainPresets().size(); }
 juce::String ShimmerstuffProcessor::mainPresetName(int i) const { return juce::isPositiveAndBelow(i, numMainPresets()) ? ssp::mainPresets()[(size_t) i].name : ""; }
@@ -176,10 +211,11 @@ void ShimmerstuffProcessor::applyMainPreset(int i)
     auto find = [](const std::vector<ssp::Pre>& l, const char* n) -> const ssp::Pre* { for (const auto& p : l) if (juce::String(p.name) == n) return &p; return nullptr; };
     applyKeys(ssp::reverbKeys(), find(ssp::reverbPresets(), m.rev), true);
     applyKeys(ssp::delayKeys(), find(ssp::delayPresets(), m.del), true);
+    applyKeys(ssp::modKeys(), m.mod != nullptr ? find(ssp::modPresets(), m.mod) : nullptr, true);
     applyKeys(ssp::fxKeys(), find(ssp::fxPresets(), m.fx), true);
     for (const auto& kv : m.extra) setParam(kv.first, kv.second);
     setParam("byp", 0.f);
-    for (int t = 0; t < 3; ++t) lastTabPreset[t] = -1;
+    for (int t = 0; t < 4; ++t) lastTabPreset[t] = -1;
 }
 int ShimmerstuffProcessor::getNumPrograms() { return numMainPresets(); }
 const juce::String ShimmerstuffProcessor::getProgramName(int i) { return mainPresetName(i); }
@@ -189,7 +225,7 @@ juce::XmlElement* ShimmerstuffProcessor::makePresetXml(int tab) const
 {
     // a small validated format: PARAM elements with id and value, plus the custom graph
     auto* xml = new juce::XmlElement("STATE");
-    const std::vector<const char*>& keys = tab == 0 ? ssp::reverbKeys() : tab == 1 ? ssp::delayKeys() : ssp::fxKeys();
+    const std::vector<const char*>& keys = tab < 0 ? ssp::fxKeys() : tabKeys(tab);
     if (tab < 0)
     {
         for (auto* par : const_cast<ShimmerstuffProcessor*>(this)->getParameters())
@@ -199,7 +235,7 @@ juce::XmlElement* ShimmerstuffProcessor::makePresetXml(int tab) const
     else
         for (auto* k : keys)
             if (auto* r = apvts.getParameter(k)) { auto* e = xml->createNewChildElement("PARAM"); e->setAttribute("id", k); e->setAttribute("value", (double) r->convertFrom0to1(r->getValue())); }
-    if (tab < 0 || tab == 2) xml->setAttribute("graph", graphStr);     // only the FX and routing tab and main presets carry the routing
+    if (tab < 0 || tab == 3) xml->setAttribute("graph", graphStr);     // only the FX and routing tab and main presets carry the routing
     xml->setAttribute("tab", tab);
     return xml;
 }
@@ -234,7 +270,8 @@ void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::Mi
 
     const bool byp = get("byp") > .5f;
     eng.revOn = get("rev_on") > .5f; eng.delOn = get("del_on") > .5f; eng.ifxOn = get("ifx_on") > .5f; eng.wfxOn = get("wfx_on") > .5f;
-    auto& rs = eng.rs; rs.type = (wm::engine::ReverbType) juce::jlimit(0, 2, (int) get("type"));
+    auto& rs = eng.rs; rs.type = (wm::engine::ReverbType) juce::jlimit(0, 8, (int) get("type")); rs.p.special = get("rspec");
+    eng.modOn = get("mod_on") > .5f;
     rs.p.decay = get("decay"); rs.p.dampHz = get("damp"); rs.p.preDelayMs = get("predelay"); rs.p.size = get("size"); rs.p.modDepth = get("mod"); rs.p.color = get("color");
     rs.p.bass = get("bass"); rs.p.xoverHz = get("xover"); rs.p.shape = get("shape"); rs.p.spread = get("spread"); rs.p.diffusion = get("diff");
     rs.lexBlend = get("lexmix"); rs.p.lexMode = juce::jlimit(0, 4, (int) get("lexmode")); rs.shimmer = get("shim_on") > .5f;
@@ -243,6 +280,13 @@ void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::Mi
     rs.wetHpHz = get("hp"); rs.wetLpHz = get("lp");
     auto& dp = eng.dp; dp.shiftSemis = get("dshift"); dp.shimmerAmount = get("dshim"); dp.dampHz = get("ddamp");
     dp.voices = juce::jlimit(1, 8, (int) std::lround(get("dvoices"))); dp.slope = get("dslope"); dp.wander = get("dwander"); dp.spin = get("dspin"); dp.diffusion = get("ddiff");
+    dp.type = juce::jlimit(0, 4, (int) get("dtype")); dp.hold = get("dhold") > .5f; dp.duck = get("dduck"); dp.duckThr = get("dthr"); dp.smear = get("dsmear"); dp.modDepth = get("dmod"); dp.modRate = get("drate");
+    for (int t = 0; t < 8; ++t)
+    {
+        eng.modUse[t] = modOnP[t]->load() > .5f; auto& m = eng.mps[t]; auto v = [&](int k) { return modP[t][k]->load(); };
+        m.type = t; m.speed = v(0); m.depth = v(1); m.voices = juce::roundToInt(v(2)); m.stages = juce::roundToInt(v(3)); m.regen = v(4); m.preDelayMs = v(5); m.diffusion = v(6); m.waveform = juce::roundToInt(v(7));
+        m.phase = v(8); m.spread = v(9); m.drive = v(10); m.minHz = v(11); m.maxHz = v(12); m.doppler = v(13); m.shift = v(14);
+    }
     dp.crossFb = get("dxfb"); dp.wide = get("dwide"); dp.tap2 = get("dtap2"); dp.tap2Ratio = get("dratio2");
     eng.ip.hp = get("i_hp"); eng.ip.lp = get("i_lp"); eng.ip.drive = get("i_drive");
     auto& wp = eng.wp; wp.satDrive = get("w_drive"); wp.squashDepth = get("w_depth");
@@ -256,8 +300,9 @@ void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::Mi
     dk.src = src == 0 || (src == 2 && !useSc) ? 0 : 1;
 
     // smoothed per-sample values (about 15 ms), the delay time glides 80 ms
-    const float targets[12] = { get("mix"), get("dmix"), get("dfb"), get("i_mix"), get("w_smix"), get("w_qmix"), get("w_duck"), get("w_width"), get("w_boost"), 0.f, 0.f, 0.f };
-    if (!smInit) { for (int i = 0; i < 9; ++i) sm[i] = targets[i]; smDt = get("dtime"); smInit = true; }
+    auto lin = [](float db) { return std::pow(10.f, db / 20.f); };
+    const float targets[16] = { get("mix"), get("dmix"), get("dfb"), get("i_mix"), get("w_smix"), get("w_qmix"), get("w_duck"), get("w_width"), get("w_boost"), lin(get("rlevel")), lin(get("dlevel")), lin(get("m_level")), get("m_mix"), 0.f, 0.f, 0.f };
+    if (!smInit) { for (int i = 0; i < 13; ++i) sm[i] = targets[i]; smDt = get("dtime"); smInit = true; }
     const float k = 1.f - std::exp(-1.f / (0.015f * (float) fs)), kT = 1.f - std::exp(-1.f / (0.08f * (float) fs));
     const float dtime = get("dtime");
     const int rt = juce::jlimit(0, kLayouts, (int) get("route"));
@@ -265,9 +310,9 @@ void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::Mi
     float pkIn = 0, pkOut = 0, minDg = 1; double sq = 0; int tp = tapPos.load(std::memory_order_relaxed);
     for (int i = 0; i < n; ++i)
     {
-        for (int j = 0; j < 9; ++j) sm[j] += k * (targets[j] - sm[j]);
+        for (int j = 0; j < 13; ++j) sm[j] += k * (targets[j] - sm[j]);
         smDt += kT * (dtime - smDt);
-        rs.mix = sm[0]; dp.mix = sm[1]; dp.feedback = sm[2]; dp.timeMs = smDt; eng.ip.satMix = sm[3]; wp.satMix = sm[4]; wp.squashMix = sm[5]; dk.amt = sm[6]; wp.width = sm[7]; wp.boostDb = sm[8];
+        rs.mix = sm[0]; dp.mix = sm[1]; dp.feedback = sm[2]; dp.timeMs = smDt; eng.ip.satMix = sm[3]; wp.satMix = sm[4]; wp.squashMix = sm[5]; dk.amt = sm[6]; wp.width = sm[7]; wp.boostDb = sm[8]; rs.level = sm[9]; dp.level = sm[10]; eng.modLevel = sm[11]; eng.modMix = sm[12];
         const float l = L[i], r = R[i], tl = useSc ? sL[i] : l, tr = useSc ? sR[i] : r;
         float ol, orr; eng.tick(g, l, r, tl, tr, ol, orr);
         if (byp) { ol = l; orr = r; }
@@ -301,6 +346,12 @@ void ShimmerstuffProcessor::setStateInformation(const void* d, int s)
             const int nt = old == 2 ? 0 : old == 3 ? 1 : old == 4 ? 2 : juce::jlimit(0, 2, old);
             t.setProperty("value", (float) nt, nullptr);
             juce::ValueTree c("PARAM"); c.setProperty("id", "shim_on", nullptr); c.setProperty("value", (old == 2 || old == 3) ? 1.f : 0.f, nullptr); tree.appendChild(c, nullptr);
+        }
+        if (!param("mod_on").isValid())   // older state: no modulation box and the routing list was shorter
+        {
+            static const int remap[9] = { 1, 3, 4, 5, 6, 7, 8, 9, 10 };
+            if (auto r = param("route"); r.isValid()) r.setProperty("value", (float) remap[juce::jlimit(0, 8, juce::roundToInt((float) r.getProperty("value", 0.f)))], nullptr);
+            else { juce::ValueTree c("PARAM"); c.setProperty("id", "route", nullptr); c.setProperty("value", 1.f, nullptr); tree.appendChild(c, nullptr); }
         }
         apvts.replaceState(tree);
         const auto g = xml->getStringAttribute("graph", graphStr);

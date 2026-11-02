@@ -24,9 +24,9 @@ static double run(const std::string& graph, bool rev, bool del, bool ifx, bool w
 
 int main() {
     // graph parsing: unknown names ignored, duplicates dropped, missing nodes appended, round trip
-    { Graph g = parseGraph("ifx>rev|del>wfx"); CHECK(g.stages == 3 && g.count[1] == 2 && graphString(g) == "ifx>rev|del>wfx"); }
-    { Graph g = parseGraph("rev>rev>zzz"); CHECK(g.stages == 4 && graphString(g) == "rev>ifx>del>wfx"); }
-    { Graph g = parseGraph(""); CHECK(g.stages == 4); }
+    { Graph g = parseGraph("ifx>rev|del>wfx>mod"); CHECK(g.stages == 4 && g.count[1] == 2 && graphString(g) == "ifx>rev|del>wfx>mod"); }
+    { Graph g = parseGraph("rev>rev>zzz"); CHECK(g.stages == 5 && graphString(g) == "rev>ifx>del>wfx>mod"); }
+    { Graph g = parseGraph(""); CHECK(g.stages == 5); }
 
     // every layout and every on/off state: finite, not silent when something is on, tails exist when a reverb or delay is on
     const char* layouts[] = {"ifx>rev>wfx>del", "ifx>del>rev>wfx", "ifx>rev|del>wfx", "ifx>del>wfx>rev", "wfx>ifx>rev>del", "rev|del|ifx|wfx"};
@@ -36,6 +36,32 @@ int main() {
         CHECK(rms > 0.01); if (rev || del) CHECK(tail > 1e-5); ++combos;
     }
     std::printf("%d layout/on-off combinations ok\n", combos);
+    // modulation: every type finite, bounded, audible; routing with the mod box parses and round-trips
+    {
+        const char* nm[8] = {"Chorus", "Flanger", "Phaser", "Tremolo", "Pan", "Rotary", "Vibrato", "Detune"};
+        for (int t = 0; t < 8; ++t) {
+            ModFx m; m.prepare(48000); ModParams p; p.type = t; p.speed = t == 5 ? 6.0f : 1.5f; p.depth = 0.8f; p.regen = 0.4f; p.voices = 3; p.diffusion = 0.4f; p.shift = 20;
+            double e = 0, d = 0, pk = 0; bool fin = true;
+            for (int i = 0; i < 96000; ++i) { const float x = 0.5f * std::sin(0.03f * float(i)) + 0.2f * std::sin(0.31f * float(i)); m.process(x, x * 0.8f, p); fin = fin && std::isfinite(m.oL) && std::isfinite(m.oR); pk = std::max(pk, (double)std::max(std::fabs(m.oL), std::fabs(m.oR))); if (i > 48000) { e += m.oL * m.oL; d += (m.oL - x) * (m.oL - x); } }
+            CHECK(fin && pk < 3.0 && e > 1.0 && d > 1.0); std::printf("  %s: peak %.2f, differs from dry %.0f %%\n", nm[t], pk, 100.0 * d / e);
+        }
+        { const Graph g = parseGraph("ifx>rev>del>mod>wfx"); CHECK(g.stages == 5 && graphString(g) == "ifx>rev>del>mod>wfx"); const Graph g2 = parseGraph("ifx>rev>del>wfx"); CHECK(graphString(g2) == "ifx>rev>del>wfx>mod"); }   // old saves get the box at the end
+        { Engine e; e.prepare(48000); e.revOn = e.delOn = e.ifxOn = e.wfxOn = false; e.modOn = true; e.modUse[0] = false; e.modUse[3] = true; e.mps[3].type = 3; e.mps[3].depth = 1.0f; e.mps[3].speed = 2.0f; const Graph g = parseGraph("ifx>rev>del>mod>wfx"); double lo = 1, hi = 0; float ol, orr;
+          for (int i = 0; i < 96000; ++i) { const float x = 0.5f * std::sin(0.05f * float(i)); e.tick(g, x, x, x, x, ol, orr); if (i > 2000) { const double a = std::fabs(ol); lo = std::min(lo, a); hi = std::max(hi, a); } }
+          CHECK(hi > 0.4 && lo < 0.1); }                                         // tremolo through the engine: the level really swings
+        // all effects on together: stable, and the Level knob scales only the wet part
+        { Engine e; e.prepare(48000); e.revOn = e.delOn = e.ifxOn = e.wfxOn = false; e.modOn = true; for (int k = 0; k < kModFx; ++k) { e.modUse[k] = true; e.mps[k].type = k; e.mps[k].speed = 1.3f; e.mps[k].depth = 0.7f; e.mps[k].regen = 0.3f; }
+          const Graph g = parseGraph("ifx>rev>del>mod>wfx"); double pk = 0; bool fin = true; float ol, orr;
+          for (int i = 0; i < 192000; ++i) { const float x = 0.4f * std::sin(0.04f * float(i)) + 0.2f * std::sin(0.27f * float(i)); e.tick(g, x, x * 0.9f, x, x, ol, orr); fin = fin && std::isfinite(ol) && std::isfinite(orr); pk = std::max(pk, (double)std::fabs(ol)); }
+          CHECK(fin && pk < 4.0); std::printf("  all 8 together: peak %.2f\n", pk); }
+        { double lv[2]; for (int w = 0; w < 2; ++w) { Engine e; e.prepare(48000); e.revOn = e.delOn = e.ifxOn = e.wfxOn = false; e.modOn = true; e.modMix = 1; e.modLevel = w ? 2.0f : 1.0f; e.modUse[0] = false; e.modUse[3] = true; e.mps[3].type = 3; e.mps[3].depth = 1; e.mps[3].speed = 3;
+              const Graph g = parseGraph("ifx>rev>del>mod>wfx"); double en = 0; float ol, orr; for (int i = 0; i < 48000; ++i) { const float x = 0.3f * std::sin(0.05f * float(i)); e.tick(g, x, x, x, x, ol, orr); en += ol * ol; } lv[w] = en; }
+          CHECK(lv[1] > lv[0] * 1.5); }
+        // reverb and delay level
+        { wm::engine::ReverbUnit r; r.prepare(48000); double e1 = 0, e2 = 0; for (int w = 0; w < 2; ++w) { r.reset(); wm::engine::ReverbSettings s; s.mix = 1; s.level = w ? 2.0f : 1.0f; s.shimmer = false; double en = 0; float l, rr; for (int i = 0; i < 48000; ++i) { const float x = i < 100 ? 0.5f : 0; r.process(x, x, l, rr, s); en += l * l; } (w ? e2 : e1) = en; } CHECK(e2 > e1 * 3.0); }
+        { wm::engine::ShimmerDelay d; d.prepare(48000); double e1 = 0, e2 = 0; for (int w = 0; w < 2; ++w) { d.reset(); wm::engine::ShimmerDelayParams p; p.mix = 1; p.level = w ? 2.0f : 1.0f; p.shimmerAmount = 0; double en = 0; float l, rr; for (int i = 0; i < 48000; ++i) { const float x = i < 100 ? 0.5f : 0; d.process(x, x, l, rr, p); en += l * l; } (w ? e2 : e1) = en; } CHECK(e2 > e1 * 3.0); }
+        std::printf("modulation ok\n");
+    }
 
     // everything off passes the input untouched
     { Engine e; e.prepare(48000); e.revOn = e.delOn = e.ifxOn = e.wfxOn = false; const Graph g = parseGraph("ifx>rev>del>wfx"); float ol, orr; e.tick(g, 0.3f, -0.2f, 0.3f, -0.2f, ol, orr); CHECK(ol == 0.3f && orr == -0.2f); }

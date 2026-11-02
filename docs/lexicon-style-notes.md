@@ -42,3 +42,12 @@ Labels: **VERIFIED** (read in a primary document), **COMMUNITY** (forum or insid
 - The UI and mockup no longer say "Lexicon" anywhere; the name is Lexicat. This notes file stays as an internal research record.
 - Delay side, from the Lexicon Effects and Twin Delays ideas (own code): Voices (1 to 8, spread evenly over the delay time), Slope (voice level over time), Wander and Spin (smoothed random drift of the voices), Diffusion (three allpass stages on the input). All off by default, so old delay settings sound the same.
 - Not done: ear check of the modes against a real unit (needs the impulse recordings).
+
+## Types, delays, modulation and Level knobs, November 2026
+- Reverb types now: Plate, Hall, Velvet, Room, Chamber, Arena, Spring, Gated, Reverse. Special knob: Gated hold, Reverse length, Spring boing.
+- Delay types: Studio, Tape, Pong, Modulated, Reverse; Hold, Ducker (amount and threshold), Smear, Mod depth and rate.
+- Modulation is a fifth routing box with eight effects (Chorus, Flanger, Phaser, Tremolo, Pan, Rotary, Vibrato, Detune) that can all run together in a fixed order; each keeps its own settings; Mix and Level are global.
+- Default routing: Input FX, then Reverb, Delay and Modulation side by side, then Wet FX.
+- Level knobs (-12 to +12 dB, wet only) on reverb, delay and modulation. Reason: parallel boxes are averaged (each wet divided by the number of boxes, about -9.5 dB for three), so the reverb sat low in the mix.
+- Optional idea, not built: a soft limiter at the very end of the Wet FX box (effect signal only).
+- Old saves load: new parameters default to the old behaviour, missing boxes are appended to the routing.

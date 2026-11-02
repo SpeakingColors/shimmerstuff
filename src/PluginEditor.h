@@ -35,11 +35,13 @@ public:
 
 struct Knob : public juce::Component
 {
-    enum Kind { Pct, Size, Ms, Hz, St, Db, Plain, Int };
+    enum Kind { Pct, Size, Ms, Hz, St, Db, Plain, Int, Wave };
     juce::Slider s { juce::Slider::RotaryVerticalDrag, juce::Slider::NoTextBox };
     juce::Label name, val;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> a;
+    juce::AudioProcessorValueTreeState* apv = nullptr;
     Knob();
+    void rebind(const juce::String& id);      // point the knob at another parameter (the Modulation tab edits one effect at a time)
     void init(juce::Component& parent, juce::AudioProcessorValueTreeState& apvts, const juce::String& id, const juce::String& nm, Kind k, juce::Colour accent, const juce::String& tip);
     void resized() override;
 };
@@ -80,7 +82,7 @@ private:
     static constexpr int kPts = 240; static constexpr float kSeconds = 12.f;
 };
 
-// Tone view: live spectrum of the plugin input and output with draggable filter lines. mode 0 reverb, 1 delay, 2 FX.
+// Tone view: live spectrum of the plugin input and output with draggable filter lines. mode 0 reverb, 1 delay, 2 FX, 3 modulation (no lines).
 class ToneView : public juce::Component
 {
 public:
@@ -101,6 +103,16 @@ private:
     std::vector<float> magIn, magOut; bool any = false;
     int drag = -1;
     void spectrum(bool input, std::vector<float>& out);
+};
+
+// Movement view: the low frequency oscillator of the effect being edited on the Modulation tab, left (solid) and right (dashed).
+class ModView : public juce::Component
+{
+public:
+    explicit ModView(ShimmerstuffProcessor& p) : proc(p) {}
+    void paint(juce::Graphics&) override;
+private:
+    ShimmerstuffProcessor& proc;
 };
 
 class EchoView : public juce::Component
@@ -127,7 +139,7 @@ private:
     ShimmerstuffProcessor& proc;
 };
 
-// Routing graph: IN, the four processors and OUT. Drag a box between two columns (series) or onto a column (parallel); power icon bypasses it,
+// Routing graph: IN, the five processors and OUT. Drag a box between two columns (series) or onto a column (parallel); power icon bypasses it,
 // arrow icon jumps to its controls; hold a number and drag up or down to change it (Shift = fine, double-click = reset).
 class RouteView : public juce::Component
 {
@@ -144,7 +156,7 @@ private:
     juce::Rectangle<float> boxRect(int stage, int idx, int count) const;
     float colX(int stage) const;
     int stageCount() const;
-    static const char* nodeName(int n); static const char* nodeSub(int n); static const char* onId(int n); static const char* rowId(int n, int i);
+    static const char* nodeName(int n); static const char* nodeSub(int n); static const char* onId(int n); const char* rowId(int n, int i) const;
     static const char* rowName(int n, int i);
     int rowAt(const Box&, juce::Point<float>) const;
     ShimmerstuffProcessor& proc; std::function<void(int)> openTab;
@@ -198,18 +210,20 @@ private:
     void updateTabComboText();
     ShimmerstuffProcessor& proc;
     ShimLook laf;
-    int tab = 0, sub[3] = { 0, 0, 0 };
+    int tab = 0, sub[4] = { 0, 0, 0, 0 }, editFx = 0;
     struct Pn { juce::Rectangle<int> r; int num; juce::String title, sub; };
     std::vector<Pn> panels;
-    TabButton tabBtn[3]; juce::TextButton subBtn[3][2], pPrev { "<" }, pNext { ">" }, pSave { "SAVE" }, pMore { "..." }, bGuide { "GUIDE" }, bSet { "SETTINGS" }, bAbout { "ABOUT & SUPPORT" }, mainSave { "SAVE" }, turnOn { "TURN IT ON" }, peakReset { "PEAK RESET" };
+    TabButton tabBtn[4]; juce::TextButton subBtn[4][2], pPrev { "<" }, pNext { ">" }, pSave { "SAVE" }, pMore { "..." }, bGuide { "GUIDE" }, bSet { "SETTINGS" }, bAbout { "ABOUT & SUPPORT" }, mainSave { "SAVE" }, turnOn { "TURN IT ON" }, peakReset { "PEAK RESET" };
     juce::ComboBox tabCombo, mainCombo;
     std::vector<int> comboIds; std::vector<juce::File> userFiles, userMain;
-    std::vector<float> selSnap[3]; juce::String selLabel[3];
-    DecayView decay; ToneView toneRev, toneDel, toneFx; EchoView echo; RouteView route; ShapeView shape; LevelMeter meter;
-    Combo rType, rMode, lay, dMode, dSrc, dRatio;
-    Knob rk[23], dk[15], ik[4], wk[6], dukn[3];
-    juce::TextButton shimTog { "SHIMMER ON" }, onBtn[4], revOn { "ON" }, delOn { "ON" };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aOn[4], aRev, aDel, aShim;
+    std::vector<float> selSnap[4]; juce::String selLabel[4];
+    DecayView decay; ToneView toneRev, toneDel, toneFx, toneMod; ModView modv; EchoView echo; RouteView route; ShapeView shape; LevelMeter meter;
+    Combo rType, rMode, lay, dMode, dSrc, dRatio, dType, mType;
+    Knob rk[24], dk[21], ik[4], wk[6], dukn[3], mk[15], mMix, mLevel;
+    juce::TextButton shimTog { "SHIMMER ON" }, onBtn[5], revOn { "ON" }, delOn { "ON" }, holdTog { "HOLD" }, modOn { "ON" }, chip[8];
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aOn[5], aRev, aDel, aShim, aHold, aModOn, aChip[8];
+    void syncEdit();                 // Modulation tab: aim the knobs at the effect chosen in "Edit effect"
+    int shownEdit = -1;
     int slow = 0;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Body)
 };

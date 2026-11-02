@@ -136,29 +136,160 @@ private:
     float sr_ = 48000; Adaa ad_; OnePole l1_, l2_; float env_[3][2] = {}; Duck duck_;
 };
 
+// ---------------- Modulation: chorus, flanger, phaser, tremolo, pan, rotary, vibrato, detune. Original code, textbook techniques.
+// Unit style like the reverb and delay: the engine keeps the dry at (1 - mix) and adds this wet part.
+struct ModParams {
+    int type = 0;            // 0 Chorus, 1 Flanger, 2 Phaser, 3 Tremolo, 4 Pan, 5 Rotary, 6 Vibrato, 7 Detune
+    float speed = 0.8f;      // Hz (Rotary: horn speed, kept between Min and Max speed)
+    float depth = 0.5f;      // 0..1
+    int voices = 2;          // Chorus: 1..4
+    float regen = 0.0f;      // -0.9..0.9, Chorus and Flanger, Phaser: feedback
+    float preDelayMs = 3.0f; // Flanger offset, Chorus base time add, Detune delay
+    float diffusion = 0.0f;  // 0..1 Chorus: time smoothing
+    int waveform = 0;        // 0 sine, 1 triangle, 2 soft square
+    float phase = 0.5f;      // 0..1: left and right movement alike (0) or opposite (1)
+    int stages = 1;          // Phaser: 0 = 4, 1 = 8, 2 = 12 stages
+    float spread = 0.7f;     // Rotary: stereo spread 0..1
+    float drive = 0.2f;      // Rotary: preamp drive 0..1
+    float minHz = 0.8f, maxHz = 6.5f;   // Rotary speed limits
+    float doppler = 0.5f;    // Rotary: pitch wobble 0..1
+    float shift = 12.0f;     // Detune: cents (0..50)
+    float mix = 1.0f;        // 1 for the wet only types, lower mixes the dry back in
+};
+constexpr int kModFx = 8;   // the effects run in this order: Chorus, Flanger, Phaser, Tremolo, Pan, Rotary, Vibrato, Detune; any of them can be on
+inline bool modWetOnly(int type) { return type == 3 || type == 4 || type == 5 || type == 6; }
+class ModFx {
+public:
+    void prepare(float sr) {
+        sr_ = sr;
+        for (int c = 0; c < 2; ++c) {
+            dl_[c].prepare(int(0.08f * sr)); for (int k = 0; k < 2; ++k) { dif_[c][k].prepare(int((4.1f + 2.9f * k) * 0.001f * sr)); } hornDl_[c].prepare(int(0.01f * sr)); rotDl_[c].prepare(int(0.01f * sr));
+            ps_[c][0].prepare(sr, 45.0f); ps_[c][1].prepare(sr, 45.0f);
+        }
+        reset();
+    }
+    void reset() {
+        for (int c = 0; c < 2; ++c) { dl_[c].clear(); for (auto& a : dif_[c]) a.clear(); hornDl_[c].clear(); rotDl_[c].clear(); ps_[c][0].reset(); ps_[c][1].reset(); fb_[c] = 0; lo_[c] = 0; for (int k = 0; k < 12; ++k) { ax_[c][k] = 0; } }
+        ph_ = 0; hornPh_ = rotPh_ = 0; hornHz_ = rotHz_ = 0.8f;
+    }
+    void process(float l, float r, const ModParams& p) {
+        const float in[2] = {l, r}, twoPi = 6.2831853f; float o[2] = {l, r};
+        ph_ += p.speed / sr_; ph_ -= std::floor(ph_);
+        const float off = 0.5f * std::min(1.0f, std::max(0.0f, p.phase));
+        const float depth = std::min(1.0f, std::max(0.0f, p.depth));
+        switch (p.type) {
+            case 0: {   // Chorus: up to 4 voices around a 8 ms + offset base, spread in phase
+                const int nv = std::max(1, std::min(4, p.voices));
+                for (int c = 0; c < 2; ++c) {
+                    float sum = 0;
+                    for (int k = 0; k < nv; ++k) {
+                        const float lf = lfo(ph_ + c * off + float(k) / float(nv), p.waveform);
+                        const float ms = 8.0f + p.preDelayMs + depth * 5.0f * (0.5f + 0.5f * lf) + 0.7f * float(k);
+                        float d = dl_[c].read(std::max(2.0f, ms * 0.001f * sr_));
+                        if (p.diffusion > 0.0f) { const float g = 0.15f + 0.5f * p.diffusion; for (auto& a : dif_[c]) d = a.tick(d, g); }
+                        sum += d;
+                    }
+                    const float wet = sum / float(nv);
+                    dl_[c].push(in[c] + std::max(-0.9f, std::min(0.9f, p.regen)) * fb_[c]); fb_[c] = wet;
+                    o[c] = (in[c] + wet * 1.2f) * 0.6f;
+                }
+                break; }
+            case 1: {   // Flanger: one short swept delay against the dry, with regen
+                for (int c = 0; c < 2; ++c) {
+                    const float lf = lfo(ph_ + c * off, p.waveform);
+                    const float ms = std::max(0.2f, p.preDelayMs) + depth * 4.0f * (0.5f + 0.5f * lf);
+                    const float d = dl_[c].read(std::max(2.0f, ms * 0.001f * sr_));
+                    dl_[c].push(in[c] + std::max(-0.9f, std::min(0.9f, p.regen)) * d);
+                    o[c] = 0.5f * (in[c] + d) * 1.2f;
+                }
+                break; }
+            case 2: {   // Phaser: 4, 8 or 12 first order allpass stages swept in frequency
+                const int n = p.stages <= 0 ? 4 : p.stages == 1 ? 8 : 12;
+                for (int c = 0; c < 2; ++c) {
+                    const float lf = lfo(ph_ + c * off, p.waveform), f = 250.0f * std::pow(2.0f, depth * 5.0f * (0.5f + 0.5f * lf));
+                    const float tn = std::tan(3.14159265f * std::min(f, 0.45f * sr_) / sr_), a = (tn - 1.0f) / (tn + 1.0f);
+                    float x = in[c] + std::max(-0.9f, std::min(0.9f, p.regen)) * fb_[c];
+                    for (int k = 0; k < n; ++k) { const float y = a * x + ax_[c][k]; ax_[c][k] = x - a * y; x = y; }
+                    fb_[c] = std::tanh(x); o[c] = 0.5f * (in[c] + x) * 1.3f;
+                }
+                break; }
+            case 3: {   // Tremolo: both channels together (phase 0) to opposite (phase 1)
+                for (int c = 0; c < 2; ++c) o[c] = in[c] * (1.0f - depth * (0.5f + 0.5f * lfo(ph_ + c * off, p.waveform)));
+                break; }
+            case 4: {   // Pan: the sound swings between left and right
+                const float lf = lfo(ph_, p.waveform);
+                o[0] = in[0] * (1.0f - depth * (0.5f + 0.5f * lf)); o[1] = in[1] * (1.0f - depth * (0.5f - 0.5f * lf));
+                break; }
+            case 5: {   // Rotary: horn (highs) and rotor (lows) spin the opposite way, with speed inertia, doppler, tremolo and pan
+                const float tgt = std::min(p.maxHz, std::max(p.minHz, p.speed));
+                hornHz_ += (1.0f - std::exp(-1.0f / (0.8f * sr_))) * (tgt - hornHz_); rotHz_ += (1.0f - std::exp(-1.0f / (1.8f * sr_))) * (tgt * 0.85f - rotHz_);
+                hornPh_ += hornHz_ / sr_; rotPh_ -= rotHz_ / sr_; hornPh_ -= std::floor(hornPh_); rotPh_ -= std::floor(rotPh_);
+                const float g = 1.0f + 6.0f * std::min(1.0f, std::max(0.0f, p.drive)), mono = std::tanh(0.5f * (in[0] + in[1]) * g) / std::tanh(g * 0.5f + 1e-3f) * 0.5f;
+                const float kx = 1.0f - std::exp(-twoPi * 800.0f / sr_); lo_[0] += kx * (mono - lo_[0]); const float low = lo_[0], high = mono - lo_[0];
+                const float hs = std::sin(twoPi * hornPh_), hc = std::cos(twoPi * hornPh_), rs = std::sin(twoPi * rotPh_), rc = std::cos(twoPi * rotPh_);
+                const float dop = std::min(1.0f, std::max(0.0f, p.doppler)) * 0.0005f * sr_;
+                hornDl_[0].push(high); rotDl_[0].push(low);
+                const float hv = hornDl_[0].read(std::max(2.0f, 0.0006f * sr_ + dop * (1.0f + hs))), rv = rotDl_[0].read(std::max(2.0f, 0.0006f * sr_ + 0.4f * dop * (1.0f + rs)));
+                const float sp = std::min(1.0f, std::max(0.0f, p.spread));
+                const float hl = hv * (1.0f + 0.35f * hc) * (0.5f + 0.5f * sp * hs), hr = hv * (1.0f + 0.35f * hc) * (0.5f - 0.5f * sp * hs);
+                const float rl = rv * (1.0f + 0.2f * rc) * (0.5f + 0.35f * sp * rs), rr = rv * (1.0f + 0.2f * rc) * (0.5f - 0.35f * sp * rs);
+                o[0] = (hl + rl) * 1.8f; o[1] = (hr + rr) * 1.8f;
+                break; }
+            case 6: {   // Vibrato: the pitch swings around the original
+                for (int c = 0; c < 2; ++c) {
+                    const float lf = lfo(ph_ + c * off, p.waveform);
+                    dl_[c].push(in[c]);
+                    o[c] = dl_[c].read(std::max(2.0f, (3.0f + depth * 2.5f * (0.5f + 0.5f * lf)) * 0.001f * sr_));
+                }
+                break; }
+            default: {   // Detune: a copy a few cents sharp on the left and flat on the right, after a short delay
+                const float cents = std::min(50.0f, std::max(0.0f, p.shift)), up = std::pow(2.0f, cents / 1200.0f), dn = 1.0f / up;
+                for (int c = 0; c < 2; ++c) {
+                    dl_[c].push(in[c]);
+                    const float x = p.preDelayMs > 0.5f ? dl_[c].read(p.preDelayMs * 0.001f * sr_) : in[c];
+                    const float sh = ps_[c][0].tick(x, c ? dn : up);
+                    o[c] = 0.5f * (x + sh) * 1.2f;
+                }
+                break; }
+        }
+        oL = o[0]; oR = o[1];
+    }
+    float oL = 0, oR = 0;
+private:
+    static float lfo(float ph, int wf) {
+        ph -= std::floor(ph);
+        if (wf == 1) return ph < 0.5f ? 4.0f * ph - 1.0f : 3.0f - 4.0f * ph;
+        const float s = std::sin(6.2831853f * ph);
+        return wf == 2 ? std::tanh(4.0f * s) / std::tanh(4.0f) : s;
+    }
+    float sr_ = 48000, ph_ = 0, hornPh_ = 0, rotPh_ = 0, hornHz_ = 0.8f, rotHz_ = 0.8f, fb_[2] = {}, lo_[2] = {}, ax_[2][12] = {};
+    wm::engine::DelayLine dl_[2], hornDl_[2], rotDl_[2]; wm::engine::Allpass dif_[2][2]; wm::engine::PitchShifter ps_[2][2];
+};
+
 // ---------------- routing graph. "ifx>rev|del>wfx": stages left to right, names inside a stage run side by side.
-enum Node { kIfx = 0, kRev = 1, kDel = 2, kWfx = 3 };
-inline const char* nodeId(int n) { static const char* s[4] = {"ifx", "rev", "del", "wfx"}; return s[n & 3]; }
+enum Node { kIfx = 0, kRev = 1, kDel = 2, kWfx = 3, kMod = 4 };
+constexpr int kNumNodes = 5;
+inline const char* nodeId(int n) { static const char* s[kNumNodes] = {"ifx", "rev", "del", "wfx", "mod"}; return s[n % kNumNodes]; }
 struct Graph {
-    int count[4] = {0, 0, 0, 0}, stages = 0;   // stages in use; stage s holds count[s] nodes in items[s][0..]
-    int items[4][4] = {};
+    int count[kNumNodes] = {}, stages = 0;   // stages in use; stage s holds count[s] nodes in items[s][0..]
+    int items[kNumNodes][kNumNodes] = {};
 };
 inline Graph parseGraph(const std::string& str) {
-    Graph g; bool seen[4] = {false, false, false, false};
+    Graph g; bool seen[kNumNodes] = {};
     size_t pos = 0;
-    while (pos <= str.size() && g.stages < 4) {
+    while (pos <= str.size() && g.stages < kNumNodes) {
         size_t end = str.find('>', pos); if (end == std::string::npos) end = str.size();
         const std::string chunk = str.substr(pos, end - pos); size_t q = 0; int n = 0;
         while (q <= chunk.size()) {
             size_t e2 = chunk.find('|', q); if (e2 == std::string::npos) e2 = chunk.size();
             const std::string id = chunk.substr(q, e2 - q);
-            for (int k = 0; k < 4; ++k) if (id == nodeId(k) && !seen[k] && n < 4) { seen[k] = true; g.items[g.stages][n++] = k; }
+            for (int k = 0; k < kNumNodes; ++k) if (id == nodeId(k) && !seen[k] && n < kNumNodes) { seen[k] = true; g.items[g.stages][n++] = k; }
             q = e2 + 1;
         }
         if (n > 0) g.count[g.stages++] = n;
         pos = end + 1;
     }
-    for (int k = 0; k < 4; ++k) if (!seen[k] && g.stages < 4) { g.items[g.stages][0] = k; g.count[g.stages++] = 1; }
+    for (int k = 0; k < kNumNodes; ++k) if (!seen[k] && g.stages < kNumNodes) { g.items[g.stages][0] = k; g.count[g.stages++] = 1; }
     return g;
 }
 inline std::string graphString(const Graph& g) {
@@ -170,12 +301,12 @@ inline std::string graphString(const Graph& g) {
 struct GState { float dl = 0, dr = 0, xl = 0, xr = 0, wl = 0, wr = 0; bool hw = false; };
 
 struct Engine {
-    wm::engine::ReverbUnit rev; wm::engine::ShimmerDelay del; InFx ifx; WetFx wfx;
+    wm::engine::ReverbUnit rev; wm::engine::ShimmerDelay del; InFx ifx; WetFx wfx; ModFx mods[kModFx];
     // per block settings
-    wm::engine::ReverbSettings rs; wm::engine::ShimmerDelayParams dp; InParams ip; WetParams wp;
-    bool revOn = true, delOn = false, ifxOn = true, wfxOn = true;
-    void prepare(float sr) { rev.prepare(sr); del.prepare(sr); ifx.prepare(sr); wfx.prepare(sr); }
-    void reset() { rev.reset(); del.reset(); }
+    wm::engine::ReverbSettings rs; wm::engine::ShimmerDelayParams dp; InParams ip; WetParams wp; ModParams mps[kModFx]; bool modUse[kModFx] = {true}; float modMix = 1.0f, modLevel = 1.0f;
+    bool revOn = true, delOn = false, ifxOn = true, wfxOn = true, modOn = false;
+    void prepare(float sr) { rev.prepare(sr); del.prepare(sr); ifx.prepare(sr); wfx.prepare(sr); for (auto& m : mods) m.prepare(sr); }
+    void reset() { rev.reset(); del.reset(); for (auto& m : mods) m.reset(); }
     // One sample. l, r: dry input. tl, tr: duck trigger (the dry input, or the sidechain). Returns output in ol, or.
     void tick(const Graph& g, float l, float r, float tl, float tr, float& ol, float& orr) {
         GState a; a.dl = a.xl = l; a.dr = a.xr = r;
@@ -212,6 +343,13 @@ private:
             if (!delOn) return o;
             const float g = 1.f - dp.mix; float ul, ur; del.process(a.xl + a.wl, a.xr + a.wr, ul, ur, dp);
             o.dl = a.dl * g; o.dr = a.dr * g; o.xl = a.xl * g; o.xr = a.xr * g; o.wl = ul - o.xl; o.wr = ur - o.xr; o.hw = true;
+        } else if (id == kMod) {
+            if (!modOn) return o;
+            float xl = a.xl + a.wl, xr = a.xr + a.wr; int n = 0;
+            for (int k = 0; k < kModFx; ++k) if (modUse[k]) { mods[k].process(xl, xr, mps[k]); xl = mods[k].oL; xr = mods[k].oR; ++n; }
+            if (n == 0) return o;
+            const float g = 1.f - modMix;
+            o.dl = a.dl * g; o.dr = a.dr * g; o.xl = a.xl * g; o.xr = a.xr * g; o.wl = (xl - o.xl) * modLevel; o.wr = (xr - o.xr) * modLevel; o.hw = true;
         } else if (wfxOn) {
             wfx.process(a.wl, a.wr, tl, tr, wp); o.wl = wfx.oL; o.wr = wfx.oR;
         }
