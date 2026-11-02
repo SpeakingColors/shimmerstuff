@@ -158,6 +158,8 @@ button[aria-pressed="true"] { background:#241238; border-color:var(--cL); color:
 .g3 .kw { width:84px; }
 .g3 .gh small { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .g3 .fld { align-self:center; }
+.g3.lex .kw { width:72px; }
+.g3.lex .fld select { min-width:96px; }
 .g3 .fld select { min-width:120px; }
 .rd { font-family:var(--f-num); font-size:12px; color:var(--cAcc); letter-spacing:0; text-transform:none; }
 aside.meters { padding:8px; gap:6px; }
@@ -1020,7 +1022,7 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
 
   function grp(host, n, title, sub, cls) { var d = document.createElement("div"); d.className = "g3" + (cls ? " " + cls : ""); d.innerHTML = '<div class="gh"><i>' + n + '</i>' + title + ' <small>' + sub + '</small></div>'; host.appendChild(d); return d; }
   var R = $("#fxR"), D = $("#fxD");
-  var g1 = grp(R, 1, "Space", "type and size of the room", "wide"), g2 = grp(R, 2, "Shimmer", "pitch shifted copy fed into the tail"), g3 = grp(R, 3, "Tone and mix", "what reaches the output"), g4 = grp(R, 4, "Lexicat", "our second reverb engine, runs side by side with the type above", "wide");
+  var g1 = grp(R, 1, "Space", "type and size of the room", "wide"), g2 = grp(R, 2, "Shimmer", "pitch shifted copy fed into the tail"), g3 = grp(R, 3, "Tone and mix", "what reaches the output"), g4 = grp(R, 4, "Lexicat", "our second reverb engine, runs side by side with the type above", "wide lex");
   mkTog(g1, "rev_on", "\u23FB On", "Switches the reverb on or off. Same switch as the power icon on the Reverb box in FX and Routing: the routing you chose stays active on every tab, this tab is only for fine tuning.", true, "pwr");
   mkSel(g1, "type", "Type", [[0, "Plate"], [1, "Hall"], [2, "Velvet"], [3, "Room"], [4, "Chamber"], [5, "Arena"], [6, "Spring"], [7, "Gated"], [8, "Reverse"]], "Plate: bright and dense, short to medium. Hall: bigger and smoother. Velvet: two halls blended, soft and dark to bright with Colour. Room: small and close. Chamber: dense, medium size. Arena: huge and wide. Spring: the boing of a spring tank. Gated: the tail is cut after a hold time (Special). Reverse: the tail swells backwards (Special sets the length). Shimmer has its own switch and works with every type. Lexicat (group 4) runs side by side with any type: turn its Blend up to mix it in.");
   mkKnob(g1, { id: "decay", label: "Decay", min: 0, max: 1, step: 0.01, def: 0.6, color: COL.rev, fmt: fmtPct, tip: "Length of the tail. The Decay display shows the real result in seconds, measured from the DSP." });
@@ -1120,7 +1122,10 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
   addUI("dtype", dimGroups);
   var M_ = $("#fxM");
   var m1 = grp(M_, 1, "Effect", "type, speed, depth and mix", "wide"), m2 = grp(M_, 2, "Chorus, flanger, phaser, detune", "voices, stages, feedback, offset, smoothing and detune", "span2"), m3 = grp(M_, 3, "Active effects", "any mix of them"), m4 = grp(M_, 4, "Rotary speaker", "horn and rotor, used by the Rotary type", "wide");
-  mkTog(m1, "mod_on", "\u23FB On", "Switches the modulation on or off. Same switch as the power icon on the Modulation box in FX and Routing: the routing you chose stays active on every tab, this tab is only for fine tuning.", false, "pwr");
+  var onB = document.createElement("button"); onB.className = "pwr"; onB.textContent = "\u23FB On"; m1.appendChild(onB);
+  function syncOn() { onB.setAttribute("aria-pressed", String(!!S["mo" + (S.m_type | 0)])); }
+  onB.addEventListener("click", function () { var t = S.m_type | 0; setParam("mo" + t, !S["mo" + t], true); });
+  attachTip(onB, "On", "Switches the effect you are editing on or off. It is the same as its button in Active effects below: they always follow each other. Switching an effect on also switches the whole Modulation box on. The power icon on the Modulation box in FX and Routing is the master bypass for all of them.");
   mkSel(m1, "m_type", "Edit effect", [[0, "Chorus"], [1, "Flanger"], [2, "Phaser"], [3, "Tremolo"], [4, "Pan"], [5, "Rotary"], [6, "Vibrato"], [7, "Detune"]], "Pick which effect the knobs below edit. Every effect keeps its own settings, and you can switch on as many as you like in the box Active effects. Chorus: thick and wide. Flanger: a short swept delay, jet sound. Phaser: swept notches. Tremolo: the level wobbles. Pan: the sound swings left and right. Rotary: a spinning speaker cabinet. Vibrato: the pitch wobbles. Detune: two copies a few cents apart for width.");
   KW.m_speed = mkKnob(m1, { id: "m_speed", label: "Speed", min: 0.05, max: 20, log: true, def: 0.8, color: COL.pink, fmt: function (v) { return v.toFixed(2) + " Hz"; }, tip: "How fast the effect moves. For Rotary this is the horn speed, held between Min and Max speed. Detune has no movement." });
   KW.m_depth = mkKnob(m1, { id: "m_depth", label: "Depth", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.pink, fmt: fmtPct, tip: "How far the effect swings: pitch and time for chorus and vibrato, sweep range for flanger and phaser, level for tremolo and pan." });
@@ -1141,7 +1146,7 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
   KW.m_max = mkKnob(m4, { id: "m_max", label: "Max speed", min: 2, max: 12, step: 0.01, def: 6.5, color: COL.acc, fmt: function (v) { return v.toFixed(2) + " Hz"; }, tip: "Rotary only: the fast speed (tremolo). The Speed knob never goes above it." });
   KW.m_dop = mkKnob(m4, { id: "m_dop", label: "Doppler", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.acc, fmt: fmtPct, tip: "Rotary only: pitch wobble as the horn comes towards you and moves away." });
   KW.m_spread = mkKnob(m4, { id: "m_spread", label: "Spread", min: 0, max: 1, step: 0.01, def: 0.7, color: COL.acc, fmt: fmtPct, tip: "Rotary only: how far the two microphones are apart. Wide is more stereo." });
-  addUI("m_type", dimGroups);
+  addUI("m_type", dimGroups); addUI("m_type", syncOn); for (var oi = 0; oi < 8; oi++) addUI("mo" + oi, syncOn); syncOn();
   loadPage();
 
   mkKnob(d4, { id: "ddiff", label: "Diffusion", min: 0, max: 1, step: 0.01, def: 0, color: COL.del, fmt: fmtPct, tip: "Smears the input so a click becomes a soft swish before it echoes. 0 is off." });
@@ -1318,7 +1323,8 @@ function setModeUI() {
 }
 $$(".modes button").forEach(function (b) { b.addEventListener("click", function () { setParam("mode", b.getAttribute("data-mode"), true); }); });
 
-function onParam(id, v) {
+function onParam(id, v, fromUI) {
+  if (/^mo[0-7]$/.test(id) && v && fromUI && !S.mod_on) setParam("mod_on", true, true);
   if (id === "m_type") loadPage(); else if (!inLoad && id.indexOf("m_") === 0 && MKEYS.indexOf(id.slice(2)) >= 0) S["m" + (S.m_type | 0) + "_" + id.slice(2)] = v;
   if (id === "trim" && E.inG) E.inG.gain.setTargetAtTime(lin(v), ctx.currentTime, 0.02);
   if (id === "src" && E.playing && v !== "file") startSrc();
@@ -1479,14 +1485,14 @@ var NODEDEF = {
   ifx: { t: "Input FX", col: COL.blue, on: "ifx_on", tab: "fx", grp: [1], rows: [["i_hp", "HP"], ["i_lp", "LP"], ["i_mix", "Sat mix"]] },
   rev: { t: "Reverb", col: COL.rev, on: "rev_on", tab: "reverb", grp: [0], rows: [["decay", "Decay"], ["predelay", "Pre-delay"], ["mix", "Mix"]] },
   del: { t: "Delay", col: COL.del, on: "del_on", tab: "delay", grp: [0], rows: [["dtime", "Time"], ["dfb", "Feedback"], ["dmix", "Mix"]] },
-  mod: { t: "Modulation", col: COL.pink, on: "mod_on", tab: "mod", grp: [0], rows: [["m_speed", "Speed"], ["m_depth", "Depth"], ["m_mix", "Mix"]] },
+  mod: { t: "Modulation", col: COL.pink, on: "mod_on", tab: "mod", grp: [0], rows: [["m_speed", "Speed"], ["m_mix", "Mix"], ["m_level", "Level"]] },
   wfx: { t: "Wet FX", col: COL.acc, on: "wfx_on", tab: "fx", grp: [2, 3, 4], rows: [["w_boost", "Boost"], ["w_duck", "Duck"], ["w_width", "Width"]] }
 };
 /* ranges of the values you can drag inside the boxes (same as the knobs) */
 var VR = {
   decay: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, predelay: { min: 0, max: 250, step: 1, fmt: fmtMs }, mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
   dtime: { min: 20, max: 2000, log: true, fmt: fmtMs }, dfb: { min: 0, max: 0.95, step: 0.01, fmt: fmtPct }, dmix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
-  m_speed: { min: 0.05, max: 20, log: true, fmt: function (v) { return v.toFixed(2) + " Hz"; } }, m_depth: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, m_mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
+  m_speed: { min: 0.05, max: 20, log: true, fmt: function (v) { return v.toFixed(2) + " Hz"; } }, m_depth: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, m_mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, m_level: { min: -12, max: 12, step: 0.1, fmt: fmtDb },
   i_hp: { min: 20, max: 2000, log: true, fmt: fmtHz }, i_lp: { min: 1000, max: 20000, log: true, fmt: fmtHz }, i_mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
   w_boost: { min: 0, max: 12, step: 0.1, fmt: fmtDb }, w_duck: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, w_width: { min: 0, max: 2, step: 0.01, fmt: fmtPct }
 };
