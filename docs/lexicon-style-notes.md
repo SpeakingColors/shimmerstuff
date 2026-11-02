@@ -53,3 +53,9 @@ Labels: **VERIFIED** (read in a primary document), **COMMUNITY** (forum or insid
 - Level match: Room +3.4 dB, Chamber +1.1 dB, Arena +2.3 dB so they sit with Hall (measured on noise).
 - Decay view: Reverse now shows its energy envelope (swell then fall) and the view measures all nine types (it used to treat types above Velvet as Hall or Plate).
 - Old saves load: new parameters default to the old behaviour, missing boxes are appended to the routing.
+
+## Decay in time, Mix names, Gated Snare chain (November 2026)
+- Decay knob is shown in ms or seconds, range 0..1.55 internally (same values as before, so old presets and saves sound the same). Time per reverb type comes from tables measured on the real engine (src/DecayMap.h, same tables in the mockup). Hall reaches about 20 s; Room about 7 s; Plate and Gated stop at 20 s. Size stays at x1.60.
+- Gated Hold shows ms (40..500), Reverse Length shows ms (100..1000). Decay view axis switches to 24 s for tails above 9 s.
+- Shimmer Amount, Amount 2 and Lexicat Blend are now called Mix, Mix 2, Mix.
+- New presets: Gated Snare Chain (FX), Gated Snare (big 80s) (main). Gate hold math: 1/8 note at 128 BPM is 234 ms.

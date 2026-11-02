@@ -1,5 +1,7 @@
 #pragma once
 #include "PluginProcessor.h"
+#include "DecayMap.h"
+#include <functional>
 #include <catui/CatLookAndFeel.h>
 #include <catui/RenderGate.h>
 #include <catui/Logo.h>
@@ -35,7 +37,8 @@ public:
 
 struct Knob : public juce::Component
 {
-    enum Kind { Pct, Size, Ms, Hz, St, Db, Plain, Int, Wave };
+    enum Kind { Pct, Size, Ms, Hz, St, Db, Plain, Int, Wave, Dec, Spec };
+    std::function<int()> typeFn;              // Dec only: the reverb type, because the same decay value is a different time per type
     juce::Slider s { juce::Slider::RotaryVerticalDrag, juce::Slider::NoTextBox };
     juce::Label name, val;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> a;
@@ -67,6 +70,7 @@ public:
     void mouseDoubleClick(const juce::MouseEvent&) override;
     void tick();
     float rt60Seconds() const;
+    float axis() const { return rt60Seconds() > 9.f ? 24.f : 12.f; }   // time axis: 12 s normally, 24 s for very long tails
     bool shimmerOn() const { return proc.get("shim_on") > .5f; }
 private:
     void measure();
@@ -79,7 +83,7 @@ private:
     std::vector<float> edc;
     float lastSig = -1.f; int stable = 0; bool dirty = true; int pk = 0;
     int drag = -1; float startA = 0, startB = 0; juce::Point<float> startPos, startHandle, curPos;
-    static constexpr int kPts = 240; static constexpr float kSeconds = 12.f;
+    static constexpr int kPts = 240; static constexpr float kSeconds = 24.f;
 };
 
 // Tone view: live spectrum of the plugin input and output with draggable filter lines. mode 0 reverb, 1 delay, 2 FX, 3 modulation (no lines).

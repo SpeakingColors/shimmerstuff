@@ -25,7 +25,7 @@ namespace
 struct F { const char* id; const char* name; float lo, hi, def, mid; };
 // id, name, min, max, default, skew centre (0 = linear). Same ids and defaults as the design mockup.
 const F kFloats[] = {
-    { "decay", "Decay", 0.f, 1.f, 0.6f, 0.f }, { "damp", "Damping", 500.f, 16000.f, 6000.f, 3000.f }, { "predelay", "Pre-delay", 0.f, 250.f, 20.f, 40.f },
+    { "decay", "Decay", 0.f, 1.55f, 0.6f, 0.f }, { "damp", "Damping", 500.f, 16000.f, 6000.f, 3000.f }, { "predelay", "Pre-delay", 0.f, 250.f, 20.f, 40.f },
     { "size", "Size", 0.5f, 1.6f, 1.f, 0.f }, { "mod", "Modulation", 0.f, 1.f, 0.5f, 0.f }, { "color", "Velvet colour", -1.f, 1.f, 0.f, 0.f },
     { "shift", "Shimmer pitch", -12.f, 12.f, 12.f, 0.f }, { "shimmer", "Shimmer amount", 0.f, 1.f, 0.5f, 0.f },
     { "shift2", "Shimmer 2 pitch", -12.f, 12.f, 7.f, 0.f }, { "shimmer2", "Shimmer 2 amount", 0.f, 1.f, 0.f, 0.f },

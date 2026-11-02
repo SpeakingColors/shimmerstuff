@@ -34,8 +34,9 @@ static juce::String fmtHz(double v)
     if (v >= 1000.0) { auto s = juce::String(v / 1000.0, 1); if (s.endsWith(".0")) s = s.dropLastCharacters(2); return s + " kHz"; }
     return juce::String(juce::roundToInt(v)) + " Hz";
 }
-static juce::String fmtVal(const juce::String& id, float v)
+static juce::String fmtVal(const juce::String& id, float v, int type = 1)
 {
+    if (id == "decay") { const float t = wm::engine::decaySeconds(type, v); return t < 1.f ? juce::String(juce::roundToInt(t * 1000.f)) + " ms" : juce::String(t, t < 10.f ? 2 : 1) + " s"; }
     if (id == "i_hp" || id == "i_lp" || id == "hp" || id == "lp" || id == "damp" || id == "ddamp") return fmtHz(v);
     if (id == "predelay" || id == "dtime" || id == "w_drel") return juce::String(juce::roundToInt(v)) + " ms";
     if (id == "w_boost" || id == "i_drive" || id == "w_drive" || id == "rlevel" || id == "dlevel" || id == "m_level") return (v > 0.04f ? "+" : "") + juce::String(v, 1) + " dB";
@@ -135,10 +136,12 @@ void Knob::init(juce::Component& parent, juce::AudioProcessorValueTreeState& apv
     parent.addAndMakeVisible(*this); apv = &apvts;
     a = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, id, s);
     if (auto* par = apvts.getParameter(id)) s.setDoubleClickReturnValue(true, par->convertFrom0to1(par->getDefaultValue()));
-    s.textFromValueFunction = [k](double v) -> juce::String
+    s.textFromValueFunction = [this, k](double v) -> juce::String
     {
         switch (k)
         {
+            case Dec: { const double t = wm::engine::decaySeconds(typeFn ? typeFn() : 1, (float) v); return t < 1.0 ? juce::String(juce::roundToInt(t * 1000.0)) + " ms" : juce::String(t, t < 10.0 ? 2 : 1) + " s"; }
+            case Spec: { const int ty = typeFn ? typeFn() : 6; if (ty == 7) return juce::String(juce::roundToInt(40.0 + 460.0 * v)) + " ms"; if (ty == 8) return juce::String(juce::roundToInt(100.0 + 900.0 * v)) + " ms"; return juce::String(juce::roundToInt(v * 100.0)) + " %"; }
             case Pct: return juce::String(juce::roundToInt(v * 100.0)) + " %";
             case Size: return "x" + juce::String(v, 2);
             case Ms: return juce::String(juce::roundToInt(v)) + " ms";
@@ -150,9 +153,11 @@ void Knob::init(juce::Component& parent, juce::AudioProcessorValueTreeState& apv
             default: { const int p = juce::roundToInt(v * 100.0); return (p > 0 ? "+" : "") + juce::String(p); }
         }
     };
-    s.valueFromTextFunction = [k](const juce::String& t) -> double
+    s.valueFromTextFunction = [this, k](const juce::String& t) -> double
     {
         const double n = t.retainCharacters("0123456789.-").getDoubleValue();
+        if (k == Spec) { const int ty = typeFn ? typeFn() : 6; return juce::jlimit(0.0, 1.0, ty == 7 ? (n - 40.0) / 460.0 : ty == 8 ? (n - 100.0) / 900.0 : n / 100.0); }
+        if (k == Dec) { const bool ms = t.containsIgnoreCase("ms") || (!t.containsIgnoreCase("s") && n >= 30.0); return wm::engine::decayFromSeconds(typeFn ? typeFn() : 1, (float) (ms ? n / 1000.0 : n)); }
         switch (k) { case Pct: case Plain: return n / 100.0; case Hz: return t.containsIgnoreCase("k") ? n * 1000.0 : n; default: return n; }
     };
     s.onValueChange = [this] { val.setText(s.getTextFromValue(s.getValue()), juce::dontSendNotification); };
@@ -242,10 +247,10 @@ juce::Point<float> DecayView::handle(int i) const
     const auto p = plot(); auto& pr = const_cast<ShimmerstuffProcessor&>(proc);
     switch (i)
     {
-        case 0: return { p.getX() + rt60Seconds() / kSeconds * p.getWidth(), p.getY() + (1.f - getNorm(pr, "size")) * p.getHeight() };
-        case 1: return { p.getX() + proc.get("predelay") / (kSeconds * 1000.f) * p.getWidth(), p.getY() + 8.f };
-        case 2: { const float f = 0.04f + 0.16f * getNorm(pr, "damp"); return { p.getX() + f * p.getWidth(), curveY(f) }; }
-        case 3: { const float f = 0.2f + 0.4f * proc.get("shimmer"); return { p.getX() + f * p.getWidth(), curveY(f) }; }
+        case 0: return { p.getX() + rt60Seconds() / axis() * p.getWidth(), p.getY() + (1.f - getNorm(pr, "size")) * p.getHeight() };
+        case 1: return { p.getX() + proc.get("predelay") / (axis() * 1000.f) * p.getWidth(), p.getY() + 8.f };
+        case 2: { const float f = 0.04f + 0.16f * getNorm(pr, "damp"); return { p.getX() + f * p.getWidth(), curveY(f * axis() / kSeconds) }; }
+        case 3: { const float f = 0.2f + 0.4f * proc.get("shimmer"); return { p.getX() + f * p.getWidth(), curveY(f * axis() / kSeconds) }; }
         default: return { p.getRight() + 26.f, p.getBottom() - proc.get("mix") * p.getHeight() };
     }
 }
@@ -267,9 +272,10 @@ void DecayView::paint(juce::Graphics& g)
         g.setColour(juce::Colour(0xff1b2523)); g.drawHorizontalLine((int) y, p.getX(), p.getRight());
         g.setColour(col::lilac.withAlpha(0.6f)); g.drawText(juce::String(-d) + " dB", 2, (int) y - 6, 46, 12, juce::Justification::right);
     }
-    for (int t = 0; t <= (int) kSeconds; t += 2)
+    const float ax = axis(), aF = ax / kSeconds;
+    for (int t = 0; t <= (int) ax; t += ax > 12.f ? 4 : 2)
     {
-        const float x = p.getX() + (float) t / kSeconds * p.getWidth();
+        const float x = p.getX() + (float) t / ax * p.getWidth();
         g.setColour(juce::Colour(0xff1b2523)); g.drawVerticalLine((int) x, p.getY(), p.getBottom());
         g.setColour(col::lilac.withAlpha(0.6f)); g.drawText(juce::String(t) + " s", (int) x - 20, (int) p.getBottom() + 4, 40, 12, juce::Justification::centred);
     }
@@ -278,10 +284,10 @@ void DecayView::paint(juce::Graphics& g)
         juce::Path path;
         for (int k = 0; k < kPts; ++k)
         {
-            const float f = (float) k / (float) (kPts - 1); const float x = p.getX() + f * p.getWidth(), y = curveY(f);
+            const float f = (float) k / (float) (kPts - 1); if (f > aF) break; const float x = p.getX() + f / aF * p.getWidth(), y = curveY(f);
             k ? path.lineTo(x, y) : path.startNewSubPath(x, y);
         }
-        juce::Path fill(path); fill.lineTo(p.getRight(), p.getBottom()); fill.lineTo(p.getX(), p.getBottom()); fill.closeSubPath();
+        juce::Path fill(path); fill.lineTo(path.getCurrentPosition().x, p.getBottom()); fill.lineTo(p.getX(), p.getBottom()); fill.closeSubPath();
         g.setGradientFill(juce::ColourGradient(col::purple.withAlpha(0.35f), 0.f, p.getY(), col::purple.withAlpha(0.03f), 0.f, p.getBottom(), false)); g.fillPath(fill);
         g.setColour(col::lilac); g.strokePath(path, juce::PathStrokeType(2.f));
     }
@@ -317,7 +323,7 @@ void DecayView::mouseDrag(const juce::MouseEvent& e)
     if (drag < 0) return; const auto p = plot(); curPos = e.position;
     const float shiftK = e.mods.isShiftDown() ? 0.25f : 1.f;
     if (drag == 0) { setNorm(proc, "decay", startA + (e.position.x - startPos.x) / p.getWidth() * 1.2f * shiftK); setNorm(proc, "size", startB - (e.position.y - startPos.y) / p.getHeight() * shiftK); }
-    else if (drag == 1) setNorm(proc, "predelay", hzNorm(proc, "predelay", juce::jlimit(0.f, 250.f, (e.position.x - p.getX()) / p.getWidth() * kSeconds * 1000.f)));
+    else if (drag == 1) setNorm(proc, "predelay", hzNorm(proc, "predelay", juce::jlimit(0.f, 250.f, (e.position.x - p.getX()) / p.getWidth() * axis() * 1000.f)));
     else if (drag == 2) setNorm(proc, "damp", ((e.position.x - p.getX()) / p.getWidth() - 0.04f) / 0.16f);
     else if (drag == 3) setNorm(proc, "shimmer", ((e.position.x - p.getX()) / p.getWidth() - 0.2f) / 0.4f);
     else if (drag == 4) setNorm(proc, "mix", (p.getBottom() - e.position.y) / p.getHeight());
@@ -682,7 +688,7 @@ void RouteView::paint(juce::Graphics& g)
             g.setColour(col::disp); g.fillRoundedRectangle(row, 2.f);
             g.setColour(c.withAlpha(on ? 0.35f : 0.12f)); g.fillRoundedRectangle(row.withWidth(row.getWidth() * getNorm(proc, id)), 2.f);
             g.setFont(font(juce::jmin(12.f, rh - 2.f))); g.setColour(on ? col::dim : col::dim.withAlpha(0.6f)); g.drawText(rowName(b.node, i), row.reduced(6.f, 0.f).toNearestInt(), juce::Justification::left);
-            g.setFont(mono(juce::jmin(12.5f, rh - 2.f))); g.setColour(on ? col::ink : col::dim); g.drawText(fmtVal(id, proc.get(id)), row.reduced(6.f, 0.f).toNearestInt(), juce::Justification::right);
+            g.setFont(mono(juce::jmin(12.5f, rh - 2.f))); g.setColour(on ? col::ink : col::dim); g.drawText(fmtVal(id, proc.get(id), (int) proc.get("type")), row.reduced(6.f, 0.f).toNearestInt(), juce::Justification::right);
         }
     }
 }
@@ -842,12 +848,12 @@ Body::Body(ShimmerstuffProcessor& p)
     dRatio.init(*this, a, "w_dratio", "Ratio", ShimmerstuffProcessor::ratioNames(), "Length of one duck cycle at the host tempo (4/4). 1/4 is one beat.");
     shape.setTooltip("Duck shape: click one. Taller means more ducking at that moment of the cycle.");
     struct K { const char* id; const char* name; Knob::Kind k; };
-    const K rks[24] = { { "decay", "Decay", Knob::Pct }, { "size", "Size", Knob::Size }, { "predelay", "Pre-delay", Knob::Ms }, { "mod", "Modulation", Knob::Pct }, { "color", "Colour", Knob::Plain },
-        { "shift", "Pitch", Knob::St }, { "shimmer", "Amount", Knob::Pct }, { "shift2", "Pitch 2", Knob::St }, { "shimmer2", "Amount 2", Knob::Pct },
+    const K rks[24] = { { "decay", "Decay", Knob::Dec }, { "size", "Size", Knob::Size }, { "predelay", "Pre-delay", Knob::Ms }, { "mod", "Modulation", Knob::Pct }, { "color", "Colour", Knob::Plain },
+        { "shift", "Pitch", Knob::St }, { "shimmer", "Mix", Knob::Pct }, { "shift2", "Pitch 2", Knob::St }, { "shimmer2", "Mix 2", Knob::Pct },
         { "damp", "Damping", Knob::Hz }, { "hp", "Wet HP", Knob::Hz }, { "lp", "Wet LP", Knob::Hz }, { "mix", "Mix", Knob::Pct },
-        { "lexmix", "Blend", Knob::Pct }, { "bass", "Bass x", Knob::Size }, { "xover", "Crossover", Knob::Hz }, { "shape", "Shape", Knob::Pct }, { "spread", "Spread", Knob::Pct },
+        { "lexmix", "Mix", Knob::Pct }, { "bass", "Bass x", Knob::Size }, { "xover", "Crossover", Knob::Hz }, { "shape", "Shape", Knob::Pct }, { "spread", "Spread", Knob::Pct },
         { "diff", "Diffusion", Knob::Pct }, { "spin", "Spin", Knob::Pct }, { "wander", "Wander", Knob::Pct }, { "early", "Pre-echoes", Knob::Pct },
-        { "rlevel", "Level", Knob::Db }, { "rspec", "Special", Knob::Pct } };
+        { "rlevel", "Level", Knob::Db }, { "rspec", "Special", Knob::Spec } };
     const char* rtip[24] = { "Tail length. Drag the yellow dot in the Decay view sideways too.", "Room size. Drag the yellow dot up or down too.", "Gap before the reverb starts. Drag the cyan handle too.", "Slow movement inside the tail, for a lusher sound.",
         "Dark to bright tilt of the tail. Velvet only.", "Pitch of the shimmer voice fed back into the reverb (shimmer types).", "How much shifted tail is fed back (shimmer types). Drag the orange handle too.", "Pitch of the second shimmer voice.", "Amount of the second shimmer voice. 0 is off.",
         "Darkens the tail. Drag the blue handle or the line in the Tone view too.", "High-pass on the reverb tail only. Keeps the tail out of the bass.", "Low-pass on the reverb tail only.", "Reverb dry/wet. Drag the pink handle too.",
@@ -864,6 +870,7 @@ Body::Body(ShimmerstuffProcessor& p)
         "A type specific control. Gated: hold time before the cut. Reverse: length of the reverse window. Spring: how much boing. Other types ignore it." };
     const juce::Colour rcol[24] = { col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::yellow, col::yellow, col::yellow, col::yellow, col::blue, col::blue, col::blue, col::pink,
         col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::pink, col::lilac };
+    rk[0].typeFn = rk[23].typeFn = [this] { return (int) proc.get("type"); };
     for (int i = 0; i < 24; ++i) rk[i].init(*this, a, rks[i].id, rks[i].name, rks[i].k, rcol[i], rtip[i]);
     const K dks[21] = { { "dtime", "Time", Knob::Ms }, { "dfb", "Feedback", Knob::Pct }, { "dshift", "Shift", Knob::St }, { "dshim", "Shimmer", Knob::Pct }, { "ddamp", "Damping", Knob::Hz }, { "dmix", "Mix", Knob::Pct },
         { "dxfb", "Cross fb", Knob::Plain }, { "dwide", "Width", Knob::Pct }, { "dtap2", "2nd voice", Knob::Pct }, { "dratio2", "2nd time", Knob::Size }, { "dvoices", "Voices", Knob::Int },
@@ -1273,6 +1280,7 @@ void Body::tickFrame()
         {
             const bool sh = decay.shimmerOn(); for (int i = 5; i < 9; ++i) rk[i].setAlpha(sh ? 1.f : 0.4f);
             rk[4].setAlpha((int) proc.get("type") == 2 ? 1.f : 0.35f);
+            rk[0].s.onValueChange(); rk[23].s.onValueChange();
             { const int ty = (int) proc.get("type"); rk[23].setAlpha(ty >= 6 ? 1.f : 0.35f);
               rk[23].name.setText(juce::String(ty == 7 ? "Hold" : ty == 8 ? "Length" : ty == 6 ? "Boing" : "Special").toUpperCase(), juce::dontSendNotification); }
             const bool lx = proc.get("lexmix") > 0.001f; for (int i = 14; i < 22; ++i) rk[i].setAlpha(lx ? 1.f : 0.35f); rMode.setAlpha(lx ? 1.f : 0.35f);

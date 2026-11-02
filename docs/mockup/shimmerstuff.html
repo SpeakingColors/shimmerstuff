@@ -953,6 +953,13 @@ WetFx.prototype.limiter = function () {
 var fmtPct = function (v) { return Math.round(v * 100) + " %"; };
 var fmtSt = function (v) { return (v > 0 ? "+" : "") + Math.round(v * 10) / 10 + " st"; };
 var fmtHz = function (v) { return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 1 : 2).replace(/\.?0+$/, "") + " kHz" : Math.round(v) + " Hz"; };
+var DEC_X = [0, 0.1, 0.3, 0.5, 0.7, 0.9, 1, 1.2, 1.425, 1.55], DEC_Y = [
+  [0.75, 0.94, 1.35, 2.01, 3.48, 9.23, 20, 20, 20, 20], [0.25, 0.36, 1.00, 2.32, 4.23, 6.82, 8.37, 11.98, 16.91, 19.65], [0.30, 0.33, 0.52, 0.98, 1.66, 2.60, 3.14, 4.42, 6.12, 7.07],
+  [0.30, 0.34, 0.78, 1.73, 3.09, 5.01, 6.10, 8.71, 12.23, 14.2], [1.5, 1.64, 2.65, 3.97, 5.52, 7.33, 8.42, 10.59, 13.49, 15.1], [0.40, 0.44, 0.57, 1.21, 1.98, 3.07, 3.64, 5.07, 6.96, 8.0]];
+/* same tables as src/DecayMap.h: RT60 measured on the real engine per type; plate and gated stop at 20 s */
+function decCurve(t) { return t === 0 || t === 7 ? 0 : t === 3 ? 2 : t === 4 ? 3 : t === 5 ? 4 : t === 6 ? 5 : 1; }
+function decSec(t, d) { var y = DEC_Y[decCurve(t)], i = 0; d = clamp(d, 0, 1.55); while (i < 8 && d > DEC_X[i + 1]) i++; return y[i] + (y[i + 1] - y[i]) * (d - DEC_X[i]) / (DEC_X[i + 1] - DEC_X[i]); }
+function fmtDec(v) { var t = decSec(S.type | 0, v); return t < 1 ? Math.round(t * 1000) + " ms" : t.toFixed(t < 10 ? 2 : 1) + " s"; }
 var fmtMs = function (v) { return v < 10 ? v.toFixed(1) + " ms" : v < 1000 ? Math.round(v) + " ms" : (v / 1000).toFixed(2) + " s"; };
 var fmtDb = function (v) { return (v > 0 ? "+" : "") + v.toFixed(1) + " dB"; };
 var COL = { rev: "#CD92FE", del: "#02EBBA", acc: "#FFD100", pink: "#FF1383", blue: "#6CC9F5" };
@@ -1025,7 +1032,7 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
   var g1 = grp(R, 1, "Space", "type and size of the room", "wide"), g2 = grp(R, 2, "Shimmer", "pitch shifted copy fed into the tail"), g3 = grp(R, 3, "Tone and mix", "what reaches the output"), g4 = grp(R, 4, "Lexicat", "our second reverb engine, runs side by side with the type above", "wide lex");
   mkTog(g1, "rev_on", "\u23FB On", "Switches the reverb on or off. Same switch as the power icon on the Reverb box in FX and Routing: the routing you chose stays active on every tab, this tab is only for fine tuning.", true, "pwr");
   mkSel(g1, "type", "Type", [[0, "Plate"], [1, "Hall"], [2, "Velvet"], [3, "Room"], [4, "Chamber"], [5, "Arena"], [6, "Spring"], [7, "Gated"], [8, "Reverse"]], "Plate: bright and dense, short to medium. Hall: bigger and smoother. Velvet: two halls blended, soft and dark to bright with Colour. Room: small and close. Chamber: dense, medium size. Arena: huge and wide. Spring: the boing of a spring tank. Gated: the tail is cut after a hold time (Special). Reverse: the tail swells backwards (Special sets the length). Shimmer has its own switch and works with every type. Lexicat (group 4) runs side by side with any type: turn its Blend up to mix it in.");
-  mkKnob(g1, { id: "decay", label: "Decay", min: 0, max: 1, step: 0.01, def: 0.6, color: COL.rev, fmt: fmtPct, tip: "Length of the tail. The Decay display shows the real result in seconds, measured from the DSP." });
+  mkKnob(g1, { id: "decay", label: "Decay", min: 0, max: 1.55, step: 0.01, def: 0.6, color: COL.rev, fmt: fmtDec, tip: "Length of the tail in time (RT60: how long it takes to fade by 60 dB), up to 20 s on Hall. Each type has its own range: Room tops out near 7 s, Plate and Gated near 20 s. The Decay display shows the measured result." });
   mkKnob(g1, { id: "size", label: "Size", min: 0.5, max: 1.6, step: 0.01, def: 1, color: COL.rev, fmt: function (v) { return "x" + v.toFixed(2); }, tip: "Scales the delay lines: a small room or a big one. Bigger sounds slower and less dense." });
   mkKnob(g1, { id: "predelay", label: "Pre-delay", min: 0, max: 250, step: 1, def: 20, color: COL.rev, fmt: fmtMs, tip: "Gap before the tail starts. Keeps the dry sound clear. Around 200 ms suits a lead." });
   KW.mod = mkKnob(g1, { id: "mod", label: "Modulation", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.rev, fmt: fmtPct, tip: "Slow movement inside the tail that stops it sounding metallic. Lexicat uses Spin and Wander instead." });
@@ -1033,15 +1040,15 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
   KW.rspec = mkKnob(g1, { id: "rspec", label: "Special", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.rev, fmt: function (v) { var t = S.type | 0; return t === 7 ? Math.round(40 + 460 * v) + " ms" : t === 8 ? Math.round(100 + 900 * v) + " ms" : t === 6 ? Math.round(v * 100) + " %" : "-"; }, tip: "Depends on the type. Gated: how long the tail is held before the cut. Reverse: length of the backwards swell. Spring: how strong the boing is. Other types ignore it." });
   mkTog(g2, "shim_on", "Shimmer on", "Turns the shimmer on or off for any reverb type, Lexicat included. Changing the type no longer touches it.", true);
   KW.shift = mkKnob(g2, { id: "shift", label: "Pitch", min: -12, max: 12, step: 1, def: 12, mid: 0, color: COL.acc, fmt: fmtSt, tip: "Pitch of the shimmer copy that feeds back into the tail. +12 is an octave up." });
-  KW.shimmer = mkKnob(g2, { id: "shimmer", label: "Amount", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.acc, fmt: fmtPct, tip: "How much of the tail is shifted and fed back. The plugin limits the total so it cannot run away." });
+  KW.shimmer = mkKnob(g2, { id: "shimmer", label: "Mix", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.acc, fmt: fmtPct, tip: "Shimmer mix: how much of the tail is shifted and fed back. The plugin limits the total so it cannot run away." });
   KW.shift2 = mkKnob(g2, { id: "shift2", label: "Pitch 2", min: -12, max: 12, step: 1, def: 7, mid: 0, color: COL.acc, fmt: fmtSt, tip: "Second shimmer pitch. +7 is a fifth up." });
-  KW.shimmer2 = mkKnob(g2, { id: "shimmer2", label: "Amount 2", min: 0, max: 1, step: 0.01, def: 0, color: COL.acc, fmt: fmtPct, tip: "Amount of the second shimmer voice. 0 means it is off." });
+  KW.shimmer2 = mkKnob(g2, { id: "shimmer2", label: "Mix 2", min: 0, max: 1, step: 0.01, def: 0, color: COL.acc, fmt: fmtPct, tip: "Mix of the second shimmer voice. 0 means it is off." });
   mkKnob(g3, { id: "damp", label: "Damping", min: 500, max: 16000, log: true, def: 6000, color: COL.blue, fmt: fmtHz, tip: "How fast the highs die away inside the tail. Lower is darker and warmer. Also draggable on the Tone view." });
   mkKnob(g3, { id: "hp", label: "Wet HP", min: 20, max: 2000, log: true, def: 20, color: COL.blue, fmt: fmtHz, tip: "Removes lows from the reverb only. Around 200 to 300 Hz keeps a lead tail clean. Also draggable on the Tone view." });
   mkKnob(g3, { id: "lp", label: "Wet LP", min: 1000, max: 20000, log: true, def: 20000, color: COL.blue, fmt: fmtHz, tip: "Removes highs from the reverb only. Also draggable on the Tone view." });
   mkKnob(g3, { id: "mix", label: "Mix", min: 0, max: 1, step: 0.01, def: 0.35, color: COL.pink, fmt: fmtPct, tip: "Dry/wet. 0 is the dry signal only, 100 % is the reverb only." });
   var LK = [
-    ["lexmix", "Blend", 0, 1, 0.01, 0, false, fmtPct, "How much Lexicat is mixed with the reverb type above. 0 is the type only, 100 % is Lexicat only, in between you hear both. With shimmer on, the shifted tail feeds both."],
+    ["lexmix", "Mix", 0, 1, 0.01, 0, false, fmtPct, "Lexicat mix: how much Lexicat is mixed with the reverb type above. 0 is the type only, 100 % is Lexicat only, in between you hear both. With shimmer on, the shifted tail feeds both."],
     ["bass", "Bass x", 0.5, 2.5, 0.01, 1.3, false, function (v) { return "x" + v.toFixed(2); }, "Bass multiply: how much longer the lows ring than the mids. 1.0 is even, 1.5 or less sounds like a real hall, 2 gives a big boomy bottom."],
     ["xover", "Crossover", 100, 2000, 0, 500, true, fmtHz, "Where the bass multiply takes over. Set it about two octaves above the low note you want to lengthen. Around 500 Hz works for boosting lows."],
     ["shape", "Shape", 0, 1, 0.01, 0.5, false, fmtPct, "How the reverb builds up. 0: the tail starts at once. Higher: it swells in slowly. Works together with Spread."],
@@ -1260,7 +1267,7 @@ function schedMeasure() {
 function startMeasure(q) { var id = ++MJ.id; MJ.run = true; MJ.again = false; if (S.mode === "reverb") measureRev(id, q); else measureDel(id); }
 function burst(n) { return n < 144 ? (Math.random() * 2 - 1) * 0.5 : 0; }
 function measureRev(id, quick) {
-  var R = quick ? 16000 : MR, u = new RUnit(); u.prepare(R); var set = revSettings(1), N = 12 * R, e = new Float32Array(N), pos = 0, key = S.type + "|" + (S.shim_on ? 1 : 0), chunk = quick ? 8000 : 24000;
+  var R = quick ? 16000 : MR, u = new RUnit(); u.prepare(R); var set = revSettings(1), N = 24 * R, e = new Float32Array(N), pos = 0, key = S.type + "|" + (S.shim_on ? 1 : 0), chunk = quick ? 8000 : 24000;
   function step() {
     if (id !== MJ.id) return; var end = Math.min(N, pos + chunk);
     for (; pos < end; pos++) { u.process(burst(pos), burst(pos), set); e[pos] = u.oL * u.oL + u.oR * u.oR; }
@@ -1279,7 +1286,7 @@ function finishRev(e, id, key, quick) {
     for (i = 0; i <= P; i++) if (bins[i] > mx) mx = bins[i];
     for (i = 0; i <= P; i++) { edc[i] = Math.max(-80, 10 * Math.log10(bins[i] / mx + 1e-12)); if (edc[i] > edc[pk]) pk = i; }
   }
-  var t5 = -1, t25 = -1; for (i = pk; i <= P; i++) { if (t5 < 0 && edc[i] <= -5) t5 = i / P * 12; if (t25 < 0 && edc[i] <= -25) { t25 = i / P * 12; break; } }
+  var t5 = -1, t25 = -1; for (i = pk; i <= P; i++) { if (t5 < 0 && edc[i] <= -5) t5 = i / P * 24; if (t25 < 0 && edc[i] <= -25) { t25 = i / P * 24; break; } }
   var rt = null, over = false;
   if (t5 >= 0 && t25 >= 0) rt = 3 * (t25 - t5); else { over = true; }
   M.rev = { edc: edc, rt: rt, over: over, key: key, total: tot, quick: !!quick }; M.busy = false; MJ.run = false; if (MJ.again && drag && drag.k === "rv") startMeasure(true);
@@ -1357,19 +1364,19 @@ function specCols(an, buf, w) {
 var GEO = null;   /* geometry of the current view, used by the mouse code */
 function axisFont(g) { g.font = "11px 'JetBrains Mono',monospace"; }
 function drawDecay(c) {
-  var g = c.g, w = c.w, h = c.h, P = { l: 46, r: 40, t: 20, b: 28 }, pw = w - P.l - P.r, ph = h - P.t - P.b, TMAX = 12, DMIN = -70, m = M.rev, d, H = [];
+  var g = c.g, w = c.w, h = c.h, P = { l: 46, r: 40, t: 20, b: 28 }, pw = w - P.l - P.r, ph = h - P.t - P.b, TSEC = 24, TMAX = (M.rev && ((M.rev.rt !== null && M.rev.rt > 9) || M.rev.over)) ? 24 : 12, DMIN = -70, m = M.rev, d, H = [];
   var X = function (t) { return P.l + t / TMAX * pw; }, Y = function (db) { return P.t + (-clamp(db, DMIN, 0)) / (-DMIN) * ph; };
-  var edcAt = function (t) { if (!m) return -20; var n = m.edc.length, f = clamp(t / TMAX, 0, 1) * (n - 1), i0 = Math.floor(f), i1 = Math.min(n - 1, i0 + 1); return lerp(m.edc[i0], m.edc[i1], f - i0); };
+  var edcAt = function (t) { if (!m) return -20; var n = m.edc.length, f = clamp(t / TSEC, 0, 1) * (n - 1), i0 = Math.floor(f), i1 = Math.min(n - 1, i0 + 1); return lerp(m.edc[i0], m.edc[i1], f - i0); };
   g.fillStyle = "#06080a"; g.fillRect(0, 0, w, h); axisFont(g);
   for (d = 0; d >= DMIN; d -= 10) { var y = Math.round(Y(d)) + 0.5; g.strokeStyle = d === -60 ? "#3a3560" : "#1a2422"; g.beginPath(); g.moveTo(P.l, y); g.lineTo(w - P.r, y); g.stroke(); g.fillStyle = d === -60 ? "#FFD100" : "#8f8bd6"; g.textAlign = "right"; g.textBaseline = "middle"; g.fillText(d + " dB", P.l - 6, y); }
-  for (var t = 0; t <= TMAX; t += 2) { var x = Math.round(X(t)) + 0.5; g.strokeStyle = "#1a2422"; g.beginPath(); g.moveTo(x, P.t); g.lineTo(x, h - P.b); g.stroke(); g.fillStyle = "#8f8bd6"; g.textAlign = "center"; g.textBaseline = "top"; g.fillText(t + " s", x, h - P.b + 6); }
+  for (var t = 0; t <= TMAX; t += TMAX > 12 ? 4 : 2) { var x = Math.round(X(t)) + 0.5; g.strokeStyle = "#1a2422"; g.beginPath(); g.moveTo(x, P.t); g.lineTo(x, h - P.b); g.stroke(); g.fillStyle = "#8f8bd6"; g.textAlign = "center"; g.textBaseline = "top"; g.fillText(t + " s", x, h - P.b + 6); }
   var pd = S.predelay / 1000; if (pd > 0) { g.fillStyle = "#01FCDC22"; g.fillRect(X(0), P.t, X(pd) - X(0), ph); }
   GEO = { kind: "rev", P: P, pw: pw, ph: ph };
   var rt = m && m.rt !== null ? m.rt : TMAX, dg = drag && drag.k === "rv" && drag.h === "yel";
   if (m) {
     var n = m.edc.length, gr = g.createLinearGradient(0, P.t, 0, h - P.b); gr.addColorStop(0, "#CD92FE66"); gr.addColorStop(1, "#CD92FE08");
-    g.beginPath(); g.moveTo(X(0), Y(DMIN)); for (var i = 0; i < n; i++) g.lineTo(X(i / (n - 1) * TMAX), Y(m.edc[i])); g.lineTo(X(TMAX), Y(DMIN)); g.closePath(); g.fillStyle = gr; g.fill();
-    g.beginPath(); for (i = 0; i < n; i++) { var px = X(i / (n - 1) * TMAX), py = Y(m.edc[i]); if (i) g.lineTo(px, py); else g.moveTo(px, py); } g.strokeStyle = "#CD92FE"; g.lineWidth = 2; g.stroke(); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(X(0), Y(DMIN)); for (var i = 0; i < n && i / (n - 1) * TSEC <= TMAX + 0.001; i++) g.lineTo(X(i / (n - 1) * TSEC), Y(m.edc[i])); g.lineTo(X(Math.min(TMAX, (i - 1) / (n - 1) * TSEC)), Y(DMIN)); g.closePath(); g.fillStyle = gr; g.fill();
+    g.beginPath(); for (i = 0; i < n && i / (n - 1) * TSEC <= TMAX + 0.001; i++) { var px = X(i / (n - 1) * TSEC), py = Y(m.edc[i]); if (i) g.lineTo(px, py); else g.moveTo(px, py); } g.strokeStyle = "#CD92FE"; g.lineWidth = 2; g.stroke(); g.lineWidth = 1;
     var label = m.rt !== null ? "RT60 " + m.rt.toFixed(1) + " s" : "RT60 over 12 s";
     g.fillStyle = "#FFD100"; g.font = "16px 'Barlow Condensed',sans-serif"; g.textAlign = "right"; g.textBaseline = "top"; g.fillText(label + (S.shim_on ? "  (with shimmer)" : "") + "   size x" + S.size.toFixed(2), w - P.r - 4, P.t + 4);
     if (M.busy || m.quick) { g.fillStyle = "#8f93a3"; g.font = "11px 'JetBrains Mono',monospace"; g.fillText(drag ? "live preview" : "updating...", w - P.r - 4, P.t + 26); }
@@ -1377,7 +1384,7 @@ function drawDecay(c) {
   /* handles. yellow: x is the decay (at the RT60 point), y along its dashed track is the size */
   var hx = dg ? clamp(drag.lx, X(0), X(TMAX)) : X(clamp(rt, 0, TMAX)), sy = P.t + 10 + (1 - (S.size - 0.5) / 1.1) * (ph - 20);
   g.strokeStyle = "#FFD10088"; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(hx, P.t); g.lineTo(hx, h - P.b); g.stroke(); g.setLineDash([]);
-  H.push({ id: "yel", x: hx, y: sy, col: "#FFD100", name: "Decay + Size", sub: Math.round(S.decay * 100) + " %  x" + S.size.toFixed(2) });
+  H.push({ id: "yel", x: hx, y: sy, col: "#FFD100", name: "Decay + Size", sub: fmtDec(S.decay) + "  x" + S.size.toFixed(2) });
   H.push({ id: "pre", x: X(pd), y: P.t + 12, col: "#01FCDC", name: "Pre-delay", sub: Math.round(S.predelay) + " ms", sq: true });
   H.push({ id: "damp", x: X(1.2), y: Y(edcAt(1.2)), col: "#6CC9F5", name: "Damping", sub: fmtHz(S.damp) });
   if (S.shim_on) H.push({ id: "shim", x: X(3.4), y: Y(edcAt(3.4)), col: "#FF9000", name: "Shimmer", sub: Math.round(S.shimmer * 100) + " %" });
@@ -1490,7 +1497,7 @@ var NODEDEF = {
 };
 /* ranges of the values you can drag inside the boxes (same as the knobs) */
 var VR = {
-  decay: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, predelay: { min: 0, max: 250, step: 1, fmt: fmtMs }, mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
+  decay: { min: 0, max: 1.55, step: 0.01, fmt: fmtDec }, predelay: { min: 0, max: 250, step: 1, fmt: fmtMs }, mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
   dtime: { min: 20, max: 2000, log: true, fmt: fmtMs }, dfb: { min: 0, max: 0.95, step: 0.01, fmt: fmtPct }, dmix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
   m_speed: { min: 0.05, max: 20, log: true, fmt: function (v) { return v.toFixed(2) + " Hz"; } }, m_depth: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, m_mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, m_level: { min: -12, max: 12, step: 0.1, fmt: fmtDb },
   i_hp: { min: 20, max: 2000, log: true, fmt: fmtHz }, i_lp: { min: 1000, max: 20000, log: true, fmt: fmtHz }, i_mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
@@ -1637,7 +1644,7 @@ cv.addEventListener("pointermove", function (e) {
   if (drag.k === "rn") { drag.px = p.x; drag.py = p.y; if (!drag.moved && Math.hypot(p.x - drag.x0, p.y - drag.y0) > 5) drag.moved = true; cv.style.cursor = "grabbing"; return; }
   if (drag.k === "rv") {
     var dx = p.x - drag.x0, dy = p.y - drag.y0, fine = e.shiftKey ? 0.25 : 1; drag.lx = p.x; drag.ly = p.y;
-    if (drag.h === "yel") { setParam("decay", clamp(Math.round((drag.d0 + dx / GEO.pw * 0.6 * fine) * 100) / 100, 0, 1), true); setParam("size", clamp(Math.round((drag.s0 - dy / (GEO.ph - 20) * 1.1 * fine) * 100) / 100, 0.5, 1.6), true); }
+    if (drag.h === "yel") { setParam("decay", clamp(Math.round((drag.d0 + dx / GEO.pw * 0.6 * fine) * 100) / 100, 0, 1.55), true); setParam("size", clamp(Math.round((drag.s0 - dy / (GEO.ph - 20) * 1.1 * fine) * 100) / 100, 0.5, 1.6), true); }
     else if (drag.h === "pre") setParam("predelay", clamp(Math.round(drag.pre0 + dx / GEO.pw * 12000 * 0.35 * fine), 0, 250), true);
     else if (drag.h === "damp") setParam("damp", clamp(Math.round(drag.dm0 * Math.pow(32, -dy / GEO.ph * fine)), 500, 16000), true);
     else if (drag.h === "shim") setParam("shimmer", clamp(Math.round((drag.sh0 - dy / GEO.ph * 1.2 * fine) * 100) / 100, 0, 1), true);
@@ -1720,7 +1727,7 @@ var FACT_R = [
   rp("Chamber Vocal", { type: 4, shim_on: false, decay: 0.55, predelay: 22, mix: 0.28, hp: 160, lp: 12000 }),
   rp("Arena Clap", { type: 5, shim_on: false, decay: 0.55, size: 1.2, predelay: 10, mix: 0.3, hp: 200, lp: 9000 }),
   rp("Spring Tank", { type: 6, shim_on: false, decay: 0.5, rspec: 0.6, size: 1, mix: 0.3, hp: 150 }),
-  rp("Gated Snare", { type: 7, shim_on: false, decay: 0.6, rspec: 0.35, predelay: 0, mix: 0.4, hp: 150, lp: 12000 }),
+  rp("Gated Snare", { type: 7, shim_on: false, decay: 0.57, rspec: 0.35, predelay: 0, mix: 0.4, hp: 150, lp: 12000 }),
   rp("Reverse Swell", { type: 8, shim_on: false, decay: 0.7, rspec: 0.6, predelay: 0, mix: 0.4, hp: 200, lp: 10000 })
 ];
 var FACT_D = [
@@ -1777,6 +1784,7 @@ var FACT_F = [
   fp("Offbeat Swell 1/2", { w_duck: 0.8, w_dmode: "sync", w_dsrc: "off", w_dratio: 2, w_dshape: 4, w_boost: 2 }),
   fp("Dirty Dark Tail", { w_smix: 0.5, w_drive: 14, i_hp: 150, w_boost: 1 }),
   fp("Wide Bright Wash", { graph: "ifx>rev|del>mod>wfx", del_on: true, w_width: 1.6, w_qmix: 0.35, w_depth: 0.5, w_boost: 2 }),
+  fp("Gated Snare Chain", { i_drive: 14, i_mix: 0.7, w_qmix: 0.8, w_depth: 0.8, w_width: 1.4, w_boost: 2 }),
   fp("Lead Space (HP in, duck)", { del_on: true, i_hp: 250, w_duck: 0.5, w_drel: 300, w_qmix: 0.25 })
 ];
 /* old saved presets used a single 'route' value; turn it into the graph */
@@ -1809,6 +1817,7 @@ var MAIN_F = [
   mp("Octave Cathedral + Echo", [R_("Octave Up Cathedral"), D_("Rising Stairs"), F_("Reverb into Delay"), { v: { w_boost: 2 } }]),
   mp("Delay Clouds into Reverb", [R_("Down Drone"), D_("Ambient Cloud"), F_("Delay into Reverb"), { v: { w_qmix: 0.3, w_depth: 0.5 } }]),
   mp("FX Between: Dirty Echo Tail", [R_("Velvet Wash"), D_("Plain Dark Delay"), F_("FX between Delay and Reverb")]),
+  mp("Gated Snare (big 80s)", [R_("Gated Snare"), F_("Gated Snare Chain"), { v: { mix: 0.5, del_on: false } }]),
   mp("Trance Gate Tail", [R_("Plate Snare"), D_("Falling Stairs"), F_("Trance Gate 1/16"), { v: { del_on: true, w_bpm: 140 } }])
 ];
 var MAINU = "shimmerstuff.main.user.v1", mainUser = [], mainIdx = 0;

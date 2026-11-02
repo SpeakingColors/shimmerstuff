@@ -35,7 +35,7 @@ inline const std::vector<Pre>& reverbPresets()
         { "Chamber Vocal", { { "type", 4 }, { "shim_on", 0 }, { "decay", .55f }, { "predelay", 22 }, { "mix", .28f }, { "hp", 160 }, { "lp", 12000 } } },
         { "Arena Clap", { { "type", 5 }, { "shim_on", 0 }, { "decay", .55f }, { "size", 1.2f }, { "predelay", 10 }, { "mix", .3f }, { "hp", 200 }, { "lp", 9000 } } },
         { "Spring Tank", { { "type", 6 }, { "shim_on", 0 }, { "decay", .5f }, { "rspec", .6f }, { "mix", .3f }, { "hp", 150 } } },
-        { "Gated Snare", { { "type", 7 }, { "shim_on", 0 }, { "decay", .6f }, { "rspec", .35f }, { "predelay", 0 }, { "mix", .4f }, { "hp", 150 }, { "lp", 12000 } } },
+        { "Gated Snare", { { "type", 7 }, { "shim_on", 0 }, { "decay", .57f }, { "rspec", .35f }, { "predelay", 0 }, { "mix", .4f }, { "hp", 150 }, { "lp", 12000 } } },
         { "Reverse Swell", { { "type", 8 }, { "shim_on", 0 }, { "decay", .7f }, { "rspec", .6f }, { "predelay", 0 }, { "mix", .4f }, { "hp", 200 }, { "lp", 10000 } } },
     };
     return p;
@@ -118,6 +118,7 @@ inline const std::vector<Pre>& fxPresets()
         { "Offbeat Swell 1/2", { { "w_duck", .8f }, { "w_dmode", 2 }, { "w_dsrc", 0 }, { "w_dratio", 3 }, { "w_dshape", 4 }, { "w_boost", 2 } } },
         { "Dirty Dark Tail", { { "w_smix", .5f }, { "w_drive", 14 }, { "i_hp", 150 }, { "w_boost", 1 } } },
         { "Wide Bright Wash", { { "del_on", 1 }, { "w_width", 1.6f }, { "w_qmix", .35f }, { "w_depth", .5f }, { "w_boost", 2 } }, "ifx>rev|del>mod>wfx" },
+        { "Gated Snare Chain", { { "i_drive", 14 }, { "i_mix", .7f }, { "w_qmix", .8f }, { "w_depth", .8f }, { "w_width", 1.4f }, { "w_boost", 2 } } },
         { "Lead Space (HP in, duck)", { { "del_on", 1 }, { "i_hp", 250 }, { "w_duck", .5f }, { "w_drel", 300 }, { "w_qmix", .25f } } },
     };
     return p;
@@ -135,6 +136,7 @@ inline const std::vector<Main>& mainPresets()
         { "Octave Cathedral + Echo", "Octave Up Cathedral", "Rising Stairs", "Reverb into Delay", { { "w_boost", 2 } } },
         { "Delay Clouds into Reverb", "Down Drone", "Ambient Cloud", "Delay into Reverb", { { "w_qmix", .3f }, { "w_depth", .5f } } },
         { "FX Between: Dirty Echo Tail", "Velvet Wash", "Plain Dark Delay", "FX between Delay and Reverb", {} },
+        { "Gated Snare (big 80s)", "Gated Snare", "Init", "Gated Snare Chain", { { "mix", .5f }, { "del_on", 0 } } },
         { "Trance Gate Tail", "Plate Snare", "Falling Stairs", "Trance Gate 1/16", { { "del_on", 1 } } },
     };
     return p;
