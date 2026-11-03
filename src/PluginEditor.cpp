@@ -142,6 +142,7 @@ void Knob::init(juce::Component& parent, juce::AudioProcessorValueTreeState& apv
         {
             case Dec: { const double t = wm::engine::decaySeconds(typeFn ? typeFn() : 1, (float) v); return t < 1.0 ? juce::String(juce::roundToInt(t * 1000.0)) + " ms" : juce::String(t, t < 10.0 ? 2 : 1) + " s"; }
             case Spec: { const int ty = typeFn ? typeFn() : 6; if (ty == 7) return juce::String(juce::roundToInt(40.0 + 460.0 * v)) + " ms"; if (ty == 8) return juce::String(juce::roundToInt(100.0 + 900.0 * v)) + " ms"; return juce::String(juce::roundToInt(v * 100.0)) + " %"; }
+            case Oct: return (v > 0.004 ? "+" : "") + juce::String(v, 2) + " oct";
             case Pct: return juce::String(juce::roundToInt(v * 100.0)) + " %";
             case Size: return "x" + juce::String(v, 2);
             case Ms: return juce::String(juce::roundToInt(v)) + " ms";
@@ -212,7 +213,7 @@ void DecayView::measure()
     s.type = (wm::engine::ReverbType) juce::jlimit(0, 8, (int) proc.get("type")); s.p.special = proc.get("rspec"); s.shimmer = proc.get("shim_on") > .5f; s.lexBlend = proc.get("lexmix"); s.p.lexMode = juce::jlimit(0, 4, (int) proc.get("lexmode"));
     s.p.decay = proc.get("decay"); s.p.dampHz = proc.get("damp"); s.p.preDelayMs = proc.get("predelay"); s.p.size = proc.get("size");
     s.p.modDepth = proc.get("mod"); s.p.color = proc.get("color"); s.shimmerSemis = proc.get("shift"); s.shimmerAmount = proc.get("shimmer");
-    s.shimmer2Semis = proc.get("shift2"); s.shimmer2Amount = proc.get("shimmer2"); s.wetHpHz = proc.get("hp"); s.wetLpHz = juce::jmin(proc.get("lp"), 7500.f); s.mix = 1.f;
+    s.shimmer2Semis = proc.get("shift2"); s.shimmer2Amount = proc.get("shimmer2"); s.wetHpHz = proc.get("hp") * std::pow(2.f, proc.get("rband")); s.wetLpHz = juce::jmin(proc.get("lp") * std::pow(2.f, proc.get("rband")), 7500.f); s.wetHpHz = juce::jmin(s.wetHpHz, s.wetLpHz); s.mix = 1.f;
     const int N = (int) (kSeconds * sr); std::vector<double> e((size_t) N);
     for (int i = 0; i < N; ++i) { float ol, orr; const float in = i == 0 ? 1.f : 0.f; u.process(in, in, ol, orr, s); e[(size_t) i] = 0.5 * ((double) ol * ol + (double) orr * orr); }
     double total = 0; for (double v : e) total += v;
@@ -848,13 +849,13 @@ Body::Body(ShimmerstuffProcessor& p)
     dRatio.init(*this, a, "w_dratio", "Ratio", ShimmerstuffProcessor::ratioNames(), "Length of one duck cycle at the host tempo (4/4). 1/4 is one beat.");
     shape.setTooltip("Duck shape: click one. Taller means more ducking at that moment of the cycle.");
     struct K { const char* id; const char* name; Knob::Kind k; };
-    const K rks[24] = { { "decay", "Decay", Knob::Dec }, { "size", "Size", Knob::Size }, { "predelay", "Pre-delay", Knob::Ms }, { "mod", "Modulation", Knob::Pct }, { "color", "Colour", Knob::Plain },
+    const K rks[25] = { { "decay", "Decay", Knob::Dec }, { "size", "Size", Knob::Size }, { "predelay", "Pre-delay", Knob::Ms }, { "mod", "Modulation", Knob::Pct }, { "color", "Colour", Knob::Plain },
         { "shift", "Pitch", Knob::St }, { "shimmer", "Mix", Knob::Pct }, { "shift2", "Pitch 2", Knob::St }, { "shimmer2", "Mix 2", Knob::Pct },
         { "damp", "Damping", Knob::Hz }, { "hp", "Wet HP", Knob::Hz }, { "lp", "Wet LP", Knob::Hz }, { "mix", "Mix", Knob::Pct },
         { "lexmix", "Mix", Knob::Pct }, { "bass", "Bass x", Knob::Size }, { "xover", "Crossover", Knob::Hz }, { "shape", "Shape", Knob::Pct }, { "spread", "Spread", Knob::Pct },
         { "diff", "Diffusion", Knob::Pct }, { "spin", "Spin", Knob::Pct }, { "wander", "Wander", Knob::Pct }, { "early", "Pre-echoes", Knob::Pct },
-        { "rlevel", "Level", Knob::Db }, { "rspec", "Special", Knob::Spec } };
-    const char* rtip[24] = { "Tail length. Drag the yellow dot in the Decay view sideways too.", "Room size. Drag the yellow dot up or down too.", "Gap before the reverb starts. Drag the cyan handle too.", "Slow movement inside the tail, for a lusher sound.",
+        { "rlevel", "Level", Knob::Db }, { "rspec", "Special", Knob::Spec }, { "rband", "Band", Knob::Oct } };
+    const char* rtip[25] = { "Tail length. Drag the yellow dot in the Decay view sideways too.", "Room size. Drag the yellow dot up or down too.", "Gap before the reverb starts. Drag the cyan handle too.", "Slow movement inside the tail, for a lusher sound.",
         "Dark to bright tilt of the tail. Velvet only.", "Pitch of the shimmer voice fed back into the reverb (shimmer types).", "How much shifted tail is fed back (shimmer types). Drag the orange handle too.", "Pitch of the second shimmer voice.", "Amount of the second shimmer voice. 0 is off.",
         "Darkens the tail. Drag the blue handle or the line in the Tone view too.", "High-pass on the reverb tail only. Keeps the tail out of the bass.", "Low-pass on the reverb tail only.", "Reverb dry/wet. Drag the pink handle too.",
         "How much Lexicat is mixed with the reverb type. 0 is the type only, 100 % is Lexicat only, in between you hear both. With shimmer on, the shifted tail feeds both.",
@@ -867,11 +868,12 @@ Body::Body(ShimmerstuffProcessor& p)
         "How far the delays move. Random Hall mode moves them the most. Too much makes held notes waver in pitch.",
         "Level of four early reflections that bypass the tail and ignore pre-delay.",
         "Level of the whole reverb (any type, Lexicat and shimmer included). Push it to bring the reverb forward in the mix without touching the dry sound.",
-        "A type specific control. Gated: hold time before the cut. Reverse: length of the reverse window. Spring: how much boing. Other types ignore it." };
-    const juce::Colour rcol[24] = { col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::yellow, col::yellow, col::yellow, col::yellow, col::blue, col::blue, col::blue, col::pink,
-        col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::pink, col::lilac };
+        "A type specific control. Gated: hold time before the cut. Reverse: length of the reverse window. Spring: how much boing. Other types ignore it.",
+        "Moves Wet HP and Wet LP together, in octaves (+1 doubles both). HP and LP never cross." };
+    const juce::Colour rcol[25] = { col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::yellow, col::yellow, col::yellow, col::yellow, col::blue, col::blue, col::blue, col::pink,
+        col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::pink, col::lilac, col::blue };
     rk[0].typeFn = rk[23].typeFn = [this] { return (int) proc.get("type"); };
-    for (int i = 0; i < 24; ++i) rk[i].init(*this, a, rks[i].id, rks[i].name, rks[i].k, rcol[i], rtip[i]);
+    for (int i = 0; i < 25; ++i) rk[i].init(*this, a, rks[i].id, rks[i].name, rks[i].k, rcol[i], rtip[i]);
     const K dks[21] = { { "dtime", "Time", Knob::Ms }, { "dfb", "Feedback", Knob::Pct }, { "dshift", "Shift", Knob::St }, { "dshim", "Shimmer", Knob::Pct }, { "ddamp", "Damping", Knob::Hz }, { "dmix", "Mix", Knob::Pct },
         { "dxfb", "Cross fb", Knob::Plain }, { "dwide", "Width", Knob::Pct }, { "dtap2", "2nd voice", Knob::Pct }, { "dratio2", "2nd time", Knob::Size }, { "dvoices", "Voices", Knob::Int },
         { "dslope", "Slope", Knob::Plain }, { "dwander", "Wander", Knob::Pct }, { "dspin", "Spin", Knob::Pct }, { "ddiff", "Diffusion", Knob::Pct },
@@ -903,8 +905,10 @@ Body::Body(ShimmerstuffProcessor& p)
     holdTog.setTooltip("Hold: freezes the repeats so they loop forever. Release it and the delay carries on as before.");
     aHold = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(a, "dhold", holdTog);
     limTog.setClickingTogglesState(true); addAndMakeVisible(limTog); limTog.setColour(juce::TextButton::buttonOnColourId, col::sel); limTog.setColour(juce::TextButton::textColourOnId, col::yellow);
-    limTog.setTooltip("Limiter: a quiet safety limiter at the very end of the Wet FX box, on the effect signal only. You will not hear it until the effect gets close to 0 dB; it lets you push Level and Wet boost without clipping.");
+    limTog.setTooltip("Master limiter at the very end of the plugin, after everything else (dry and effects together). It stops the output from going past the Out ceiling. In raises the level going into the limiter (the more you push, the louder and denser); Out is the ceiling. Off leaves the output alone.");
     aLim = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(a, "w_lim", limTog);
+    limIn.init(*this, a, "lim_in", "In", Knob::Db, col::yellow, "Gain into the limiter, in dB. Push it up to make the output louder and denser; the limiter keeps the peaks under the Out ceiling. Only active when the Limiter is on.");
+    limOut.init(*this, a, "lim_out", "Out", Knob::Db, col::yellow, "The ceiling: the output never goes above this level. -1 dB leaves a little room for the converters. Only active when the Limiter is on.");
 
     // modulation tab: the knobs follow the effect chosen in "Edit effect"
     mType.init(*this, a, "m_type", "Edit effect", juce::StringArray { "Chorus", "Flanger", "Phaser", "Tremolo", "Pan", "Rotary", "Vibrato", "Detune" }, "Which effect the knobs on this tab edit. Every effect keeps its own settings; switch them on in Active effects to use them together.");
@@ -937,10 +941,18 @@ Body::Body(ShimmerstuffProcessor& p)
           chip[i].setTooltip(juce::String("Use ") + juce::String(mn8[i]).toLowerCase() + " in the chain. Use Edit effect to change its settings. Effects run in this order, one after another.");
           aChip[i] = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(a, ssp::modOnId(i), chip[i]);
       } }
-    const K iks[4] = { { "i_hp", "Input HP", Knob::Hz }, { "i_lp", "Input LP", Knob::Hz }, { "i_drive", "Drive", Knob::Db }, { "i_mix", "Sat mix", Knob::Pct } };
-    const char* itip[4] = { "Cuts lows before they reach the effects.", "Cuts highs before they reach the effects.", "Saturation on the signal that feeds the effects. Antialiased.", "Dry/wet of the input saturation. 0 is off." };
-    const juce::Colour icol[4] = { col::blue, col::blue, col::yellow, col::pink };
-    for (int i = 0; i < 4; ++i) ik[i].init(*this, a, iks[i].id, iks[i].name, iks[i].k, icol[i], itip[i]);
+    const K iks[5] = { { "i_hp", "Input HP", Knob::Hz }, { "i_lp", "Input LP", Knob::Hz }, { "i_drive", "Drive", Knob::Db }, { "i_mix", "Sat mix", Knob::Pct }, { "i_band", "Band", Knob::Oct } };
+    const char* itip[5] = { "Cuts lows before they reach the effects.", "Cuts highs before they reach the effects.", "Saturation on the signal that feeds the effects. Antialiased.", "Dry/wet of the input saturation. 0 is off.", "Moves Input HP and Input LP together, in octaves (+1 doubles both). HP and LP never cross." };
+    const juce::Colour icol[5] = { col::blue, col::blue, col::yellow, col::pink, col::blue };
+    for (int i = 0; i < 5; ++i) ik[i].init(*this, a, iks[i].id, iks[i].name, iks[i].k, icol[i], itip[i]);
+    // high-pass and low-pass can go anywhere but never past each other
+    auto link = [](Knob& h, Knob& l)
+    {
+        const auto oh = h.s.onValueChange, ol = l.s.onValueChange;
+        h.s.onValueChange = [&h, &l, oh] { if (oh) oh(); if (h.s.getValue() > l.s.getValue()) h.s.setValue(l.s.getValue(), juce::sendNotificationSync); };
+        l.s.onValueChange = [&h, &l, ol] { if (ol) ol(); if (l.s.getValue() < h.s.getValue()) l.s.setValue(h.s.getValue(), juce::sendNotificationSync); };
+    };
+    link(rk[10], rk[11]); link(ik[0], ik[1]);
     const K wks[6] = { { "w_drive", "Drive", Knob::Db }, { "w_smix", "Sat mix", Knob::Pct }, { "w_width", "Width", Knob::Pct }, { "w_boost", "Wet boost", Knob::Db }, { "w_depth", "Depth", Knob::Pct }, { "w_qmix", "Mix", Knob::Pct } };
     const char* wtip[6] = { "Saturation on the wet signal only. Antialiased.", "Dry/wet of the wet saturation. 0 is off.", "Stereo width of the wet signal. 100 % is unchanged, 0 is mono.", "Extra level on the wet signal, to push the effect harder.",
         "How hard the three bands are pushed: quiet up, loud down. Dense, bright tails (OTT style).", "Dry/wet of the squash. 0 is off." };
@@ -1162,7 +1174,8 @@ void Body::layoutTab()
     mainCombo.setBounds(944, 100, 226, 36); mainSave.setBounds(1178, 96, 108, 44);
     for (int j = 0; j < 2; ++j) subBtn[tab][j].setBounds(L + j * 78, 162, j == 0 ? 74 : 62, 30);
     turnOn.setBounds(480, 172, 100, 22);
-    meter.setBounds(1096, 162, 190, bottom - 162); peakReset.setBounds(1096 + 8, bottom - 40, 174, 32);
+    meter.setBounds(1096, 162, 190, bottom - 162 - 160); peakReset.setBounds(1096 + 8, bottom - 40, 174, 32);
+    limTog.setBounds(1096 + 8, bottom - 156, 174, 28); limTog.setVisible(true); limIn.setBounds(1096 + 4, bottom - 124, 90, 80); limOut.setBounds(1096 + 96, bottom - 124, 90, 80); limIn.setVisible(true); limOut.setVisible(true);
     for (auto* v : { (juce::Component*) &decay, (juce::Component*) &toneRev, (juce::Component*) &toneDel, (juce::Component*) &toneFx, (juce::Component*) &toneMod, (juce::Component*) &modv, (juce::Component*) &echo, (juce::Component*) &route, (juce::Component*) &shape }) v->setVisible(false);
     for (auto& k : rk) k.setVisible(false);
     for (auto& k : dk) k.setVisible(false);
@@ -1172,7 +1185,7 @@ void Body::layoutTab()
     for (auto& k : mk) k.setVisible(false);
     mMix.setVisible(false); mLevel.setVisible(false);
     for (auto* c : { &rType, &rMode, &lay, &dMode, &dSrc, &dRatio, &dType, &mType }) c->setVisible(false);
-    shimTog.setVisible(false); holdTog.setVisible(false); limTog.setVisible(false); modOn.setVisible(false);
+    shimTog.setVisible(false); holdTog.setVisible(false); modOn.setVisible(false);
     for (auto& b : chip) b.setVisible(false);
     for (auto& b : onBtn) b.setVisible(false);
     revOn.setVisible(false); delOn.setVisible(false);
@@ -1191,7 +1204,7 @@ void Body::layoutTab()
         place(revOn, L + LW - 78, p1 + 6, 66, 24);
         place(rType, L + 12, p1 + 44, 132, 52); knobRow(rk, 5, L + 160, p1 + 32, 100); place(rk[23], L + 160 + 500, p1 + 32, 100, 76);
         place(shimTog, L + 532 - 130, p2 + 6, 118, 24);
-        knobRow(rk + 5, 4, L + 16, p2 + 32, 100); knobRow(rk + 9, 4, L + 540 + 16, p2 + 32, 100);
+        knobRow(rk + 5, 4, L + 16, p2 + 32, 100); { Knob* tk[5] = { &rk[9], &rk[10], &rk[11], &rk[24], &rk[12] }; for (int i = 0; i < 5; ++i) place(*tk[i], L + 540 + 16 + i * 100, p2 + 32, 100, 76); }
         place(rMode, L + 12, p3 + 44, 132, 52); knobRow(rk + 13, 9, L + 160, p3 + 32, 88); place(rk[22], L + 160 + 9 * 88, p3 + 32, 88, 76);
     }
     else if (tab == 1)
@@ -1242,10 +1255,10 @@ void Body::layoutTab()
         place(lay, L + 12, r1y + 34, w3 - 24, 46);
         for (int i = 0; i < 5; ++i) place(onBtn[i], L + 12 + (i % 3) * 112, r1y + 92 + (i / 3) * 44, 106, 34);
         const int ix = L + w3 + 8 + 8, wx = L + 2 * (w3 + 8) + 8, cw = (w3 - 16) / 3;
-        for (int i = 0; i < 3; ++i) place(ik[i], ix + i * cw, r1y + 32, cw, 76);
-        place(ik[3], ix, r1y + 112, cw, 76);
+        place(ik[0], ix, r1y + 32, cw, 76); place(ik[1], ix + cw, r1y + 32, cw, 76); place(ik[4], ix + 2 * cw, r1y + 32, cw, 76);
+        place(ik[2], ix, r1y + 112, cw, 76); place(ik[3], ix + cw, r1y + 112, cw, 76);
         for (int i = 0; i < 3; ++i) place(wk[i], wx + i * cw, r1y + 32, cw, 76);
-        place(wk[3], wx, r1y + 112, cw, 76); place(limTog, wx + cw + 14, r1y + 130, 110, 34);
+        place(wk[3], wx, r1y + 112, cw, 76);
         place(wk[4], L + 8, r2y + 34, 100, 76); place(wk[5], L + 8 + 100, r2y + 34, 100, 76);
         const int dx = L + w3 + 8;
         place(dMode, dx + 14, r2y + 30, 210, 40); place(dSrc, dx + 14, r2y + 74, 210, 40);

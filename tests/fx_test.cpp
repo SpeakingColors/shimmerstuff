@@ -63,13 +63,16 @@ int main() {
         std::printf("modulation ok\n");
     }
 
-    // wet limiter: with it on a loud boosted signal stays under 1.0, a quiet one passes untouched, with it off nothing changes
-    { double pkOn = 0, pkOff = 0, dq = 0;
-      for (int w = 0; w < 3; ++w) { WetFx f; f.prepare(48000); WetParams p; p.boostDb = w == 2 ? 0.f : 12.f; p.limit = w == 0; p.satDrive = 1; float mx = 0;
-        for (int i = 0; i < 48000; ++i) { const float x = (w == 2 ? 0.2f : 0.9f) * std::sin(0.07f * float(i)); f.process(x, x, 0, 0, p); if (i > 2000) { mx = std::max(mx, std::fabs(f.oL)); if (w == 2) dq = std::max(dq, (double) std::fabs(f.oL - x)); } }
-        if (w < 2) (w == 0 ? pkOn : pkOff) = mx; }
-      CHECK(pkOn < 1.0 && pkOff > 2.0); std::printf("  limiter: on %.3f, off %.3f\n", pkOn, pkOff); }
-    { WetFx f; f.prepare(48000); WetParams p; p.limit = true; p.satDrive = 1; double d = 0; for (int i = 0; i < 48000; ++i) { const float x = 0.3f * std::sin(0.05f * float(i)); f.process(x, x, 0, 0, p); if (i > 100) d = std::max(d, (double) std::fabs(f.oL - x)); } CHECK(d < 1e-4); }
+    // master limiter: on holds a loud signal under the Out ceiling, a quiet one passes untouched, In gain pushes into it
+    { double pk1 = 0, pk2 = 0, dq = 0, dq2 = 0;
+      MasterLimiter m; m.prepare(48000);
+      for (int i = 0; i < 48000; ++i) { float l = 3.f * std::sin(0.07f * float(i)), r = l; m.process(l, r, 0.f, -1.f); if (i > 2000) pk1 = std::max(pk1, (double) std::fabs(l)); }
+      MasterLimiter m2; m2.prepare(48000);
+      for (int i = 0; i < 48000; ++i) { float l = 0.2f * std::sin(0.07f * float(i)), r = l; const float x = l; m2.process(l, r, 12.f, -3.f); if (i > 2000) { pk2 = std::max(pk2, (double) std::fabs(l)); } (void) x; }
+      MasterLimiter m3; m3.prepare(48000);
+      for (int i = 0; i < 48000; ++i) { float l = 0.3f * std::sin(0.05f * float(i)), r = l; const float x = l; m3.process(l, r, 0.f, -1.f); if (i > 100) dq = std::max(dq, (double) std::fabs(l - x)); }
+      CHECK(pk1 <= 0.8913 + 1e-3 && dq < 1e-4); CHECK(pk2 <= 0.7080 + 1e-3 && pk2 > 0.6);
+      std::printf("  master limiter: loud peak %.3f (ceiling 0.891), in +12 out -3 peak %.3f (ceiling 0.708), quiet error %.6f\n", pk1, pk2, dq); (void) dq2; }
 
     // everything off passes the input untouched
     { Engine e; e.prepare(48000); e.revOn = e.delOn = e.ifxOn = e.wfxOn = false; const Graph g = parseGraph("ifx>rev>del>wfx"); float ol, orr; e.tick(g, 0.3f, -0.2f, 0.3f, -0.2f, ol, orr); CHECK(ol == 0.3f && orr == -0.2f); }

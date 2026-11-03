@@ -90,6 +90,8 @@ textarea { width:100%; min-height:110px; font-family:var(--f-num); font-size:12p
 .ro { display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; font-family:var(--f-num); font-size:11px; letter-spacing:0; }
 .ro div { white-space:nowrap; }
 .ro div { display:flex; justify-content:space-between; gap:4px; }
+.lim { display:flex; flex-wrap:wrap; gap:2px 6px; align-items:flex-end; justify-content:center; }
+.lim > button { flex:1 0 100%; }
 .ro span { color:var(--ink-dim); } .ro b { font-weight:500; color:var(--cAcc); }
 .corr { position:relative; height:46px; background:var(--disp); border:1px solid var(--line); border-radius:3px; }
 .corr canvas { position:absolute; inset:0; width:100%; height:100%; }
@@ -220,6 +222,7 @@ aside.meters { padding:8px; gap:6px; }
         <h3><span>Level</span><span>Clip<i class="led" id="clipLed"></i></span></h3>
         <div class="mcv"><canvas id="cvM"></canvas></div>
         <div class="ro" id="ro"></div>
+        <div class="lim" id="limBox"></div>
         <button id="bPkReset" data-tip="Clears the held peaks and the clip light. Shortcut: R.">Peak reset</button>
       </aside>
     </section>
@@ -414,8 +417,8 @@ function setPresetSet(factory, keys, ukey) {
 function rebuildPre() { PRE.list = PRE.factory.map(function (p) { return { name: p.name, v: p.v, cat: "Factory" }; }).concat(PRE.user.map(function (p) { return { name: p.name, v: p.v, cat: "Yours" }; })); }
 function selectPre(i) {
   PRE.idx = clamp(i, 0, PRE.list.length - 1); var p = PRE.list[PRE.idx]; $("#pNameT").textContent = p.name;
-  PRE.keys.forEach(function (k) { if (k in p.v) { var v = p.v[k]; if (typeof DEF[k] === "number" && typeof v === "number" && isFinite(v)) setParam(k, v, true); else if (typeof DEF[k] === "boolean") setParam(k, !!v, true); else if (typeof DEF[k] === "string" && typeof v === "string") setParam(k, v, true); } });
-  if (PRE.apply) PRE.apply(p);
+  PRE.applying = true; PRE.keys.forEach(function (k) { if (k in p.v) { var v = p.v[k]; if (typeof DEF[k] === "number" && typeof v === "number" && isFinite(v)) setParam(k, v, true); else if (typeof DEF[k] === "boolean") setParam(k, !!v, true); else if (typeof DEF[k] === "string" && typeof v === "string") setParam(k, v, true); } });
+  PRE.applying = false; if (PRE.apply) PRE.apply(p);
 }
 function drawPreList() {
   var l = $("#pList"), h = "", last = "";
@@ -940,14 +943,14 @@ WetFx.prototype.process = function (wl, wr, dl, dr, p) {
   var m = 0.5 * (w[0] + w[1]), sd = 0.5 * (w[0] - w[1]) * p.width; w[0] = m + sd; w[1] = m - sd;
   var dg = this.duck.tick(dl, dr, p.duck), bg = Math.pow(10, p.boost / 20);
   this.dg = dg; this.oL = w[0] * dg * bg; this.oR = w[1] * dg * bg;
-  if (p.limit) this.limiter(); else this.limG = 1;
 };
-/* Safety limiter at the very end of the wet chain (mirrors WetFx::limiter): fast linked gain limiter at -1 dBFS, then a soft knee above 0.9. */
-WetFx.prototype.limiter = function () {
-  var l = this.oL, r = this.oR, pk = Math.max(Math.abs(l), Math.abs(r)), thr = 0.891, tgt = pk > thr ? thr / pk : 1, g = this.limG === undefined ? 1 : this.limG;
-  var a = tgt < g ? 1 - Math.exp(-1 / (0.0003 * this.sr)) : 1 - Math.exp(-1 / (0.12 * this.sr)); g += a * (tgt - g); this.limG = g; l *= g; r *= g;
-  var soft = function (x) { var ax = Math.abs(x); if (ax <= 0.9) return x; var y = 0.9 + 0.1 * Math.tanh((ax - 0.9) / 0.1); return x < 0 ? -y : y; };
-  this.oL = soft(l); this.oR = soft(r);
+/* Master limiter (mirrors MasterLimiter in Fx.h): In gain, then a fast linked gain limiter to the Out ceiling (0.3 ms attack, 120 ms release), then a soft knee. */
+function MLim() { this.g = 1; }
+MLim.prototype.process = function (o, inDb, outDb, sr) {
+  var k = Math.pow(10, inDb / 20), c = Math.pow(10, outDb / 20), l = o[0] * k, r = o[1] * k, pk = Math.max(Math.abs(l), Math.abs(r)), tgt = pk > c ? c / pk : 1;
+  var a = tgt < this.g ? 1 - Math.exp(-1 / (0.0003 * sr)) : 1 - Math.exp(-1 / (0.12 * sr)); this.g += a * (tgt - this.g); l *= this.g; r *= this.g;
+  var soft = function (x) { var ax = Math.abs(x) / c; if (ax <= 0.95) return x; var y = (0.95 + 0.05 * Math.tanh((ax - 0.95) / 0.05)) * c; return x < 0 ? -y : y; };
+  o[0] = soft(l); o[1] = soft(r);
 };
 /* ===== shimmerstuff mockup: Shimmer Reverb and Shimmer Delay. The sound comes from a JS port of the plugin DSP (shimmer-dsp.js). ===== */
 var fmtPct = function (v) { return Math.round(v * 100) + " %"; };
@@ -967,20 +970,20 @@ var COL = { rev: "#CD92FE", del: "#02EBBA", acc: "#FFD100", pink: "#FF1383", blu
 /* ---------- parameters (names mirror the plugins) ---------- */
 def("mode", "reverb"); def("src", "pluck"); def("trim", 0); def("byp", false); def("view", "tail");
 def("type", 3); def("decay", 0.6); def("damp", 6000); def("predelay", 20); def("size", 1); def("mod", 0.5); def("color", 0);
-def("shift", 12); def("shimmer", 0.5); def("shift2", 7); def("shimmer2", 0); def("hp", 20); def("lp", 20000); def("mix", 0.35);
+def("shift", 12); def("shimmer", 0.5); def("shift2", 7); def("shimmer2", 0); def("hp", 20); def("lp", 20000); def("rband", 0); def("mix", 0.35);
 def("graph", "ifx>rev|del|mod>wfx");
 /* modulation: every effect keeps its own settings (m0_speed ... m7_shift) and its own on switch (mo0 ... mo7). The knobs on the tab edit the effect chosen in "Edit". */
 var MKEYS = ["speed", "depth", "voices", "stages", "regen", "pre", "diff", "wave", "phase", "spread", "drive", "min", "max", "dop", "shift"];
 var MDEF = [{ speed: 0.8, depth: 0.5, regen: 0 }, { speed: 0.25, depth: 0.8, regen: 0.5, pre: 1 }, { speed: 0.3, depth: 0.7, regen: 0.4 }, { speed: 4, depth: 0.6 }, { speed: 0.5, depth: 1 }, { speed: 0.8, depth: 0.5 }, { speed: 5, depth: 0.4 }, { speed: 0.8, shift: 12, pre: 12 }];
 var MBASE = { speed: 0.8, depth: 0.5, voices: 2, stages: 1, regen: 0, pre: 3, diff: 0, wave: 0, phase: 0.5, spread: 0.7, drive: 0.2, min: 0.8, max: 6.5, dop: 0.5, shift: 12 };
 function mdef(t, k) { var d = MDEF[t]; return d && k in d ? d[k] : MBASE[k]; }
-for (var mt0 = 0; mt0 < 8; mt0++) { MKEYS.forEach(function (k) { def("m" + mt0 + "_" + k, mdef(mt0, k)); }); def("mo" + mt0, mt0 === 0); } def("rev_on", true); def("del_on", false); def("ifx_on", true); def("wfx_on", true); def("i_hp", 20); def("i_lp", 20000); def("i_drive", 6); def("i_mix", 0); def("w_drive", 8); def("w_smix", 0); def("w_depth", 0.6); def("w_qmix", 0); def("w_duck", 0); def("w_drel", 250); def("w_dmode", "follow"); def("w_dsrc", "input"); def("w_dshape", 0); def("w_drate", 2); def("w_dratio", 1); def("w_bpm", 140); def("w_width", 1); def("w_boost", 0); def("w_lim", false);
+for (var mt0 = 0; mt0 < 8; mt0++) { MKEYS.forEach(function (k) { def("m" + mt0 + "_" + k, mdef(mt0, k)); }); def("mo" + mt0, mt0 === 0); } def("rev_on", true); def("del_on", false); def("ifx_on", true); def("wfx_on", true); def("i_hp", 20); def("i_lp", 20000); def("i_band", 0); def("i_drive", 6); def("i_mix", 0); def("w_drive", 8); def("w_smix", 0); def("w_depth", 0.6); def("w_qmix", 0); def("w_duck", 0); def("w_drel", 250); def("w_dmode", "follow"); def("w_dsrc", "input"); def("w_dshape", 0); def("w_drate", 2); def("w_dratio", 1); def("w_bpm", 140); def("w_width", 1); def("w_boost", 0); def("w_lim", false);
 def("lexmix", 0); def("lexmode", 0); def("shim_on", true); def("bass", 1.3); def("xover", 500); def("shape", 0.5); def("spread", 0.4); def("diff", 0.7); def("spin", 0.5); def("wander", 0.5); def("early", 0.5); def("dxfb", 0); def("dwide", 0); def("dtap2", 0); def("dratio2", 0.5); def("dvoices", 1); def("dslope", 0); def("dwander", 0); def("dspin", 0.5); def("ddiff", 0);
 def("dtime", 450); def("dfb", 0.55); def("dshift", 12); def("dshim", 1); def("ddamp", 5000); def("dmix", 0.4);
-var RK = ["rev_on", "type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "mix", "bass", "xover", "shape", "spread", "diff", "spin", "wander", "early", "lexmix", "lexmode", "shim_on", "rspec", "rlevel"];
+var RK = ["rev_on", "type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "rband", "mix", "bass", "xover", "shape", "spread", "diff", "spin", "wander", "early", "lexmix", "lexmode", "shim_on", "rspec", "rlevel"];
 var DK = ["del_on", "dtime", "dfb", "dshift", "dshim", "ddamp", "dmix", "dxfb", "dwide", "dtap2", "dratio2", "dvoices", "dslope", "dwander", "dspin", "ddiff", "dtype", "dhold", "dduck", "dthr", "dsmear", "dmod", "drate", "dlevel"];
 var MDK = ["mod_on", "m_mix", "m_level"]; for (var mt1 = 0; mt1 < 8; mt1++) { MDK.push("mo" + mt1); MKEYS.forEach(function (k) { MDK.push("m" + mt1 + "_" + k); }); } MDK.push("m_type");
-var FK = ["graph", "rev_on", "del_on", "mod_on", "ifx_on", "wfx_on", "i_hp", "i_lp", "i_drive", "i_mix", "w_drive", "w_smix", "w_depth", "w_qmix", "w_duck", "w_drel", "w_dmode", "w_dsrc", "w_dshape", "w_drate", "w_dratio", "w_bpm", "w_width", "w_boost", "w_lim"];
+var FK = ["graph", "rev_on", "del_on", "mod_on", "ifx_on", "wfx_on", "i_hp", "i_lp", "i_band", "i_drive", "i_mix", "w_drive", "w_smix", "w_depth", "w_qmix", "w_duck", "w_drel", "w_dmode", "w_dsrc", "w_dshape", "w_drate", "w_dratio", "w_bpm", "w_width", "w_boost", "w_lim", "lim_in", "lim_out"];
 var MK = RK.concat(DK, MDK, FK);
 var MEAS_R = { type: 1, decay: 1, damp: 1, predelay: 1, size: 1, mod: 1, color: 1, shift: 1, shimmer: 1, shift2: 1, shimmer2: 1, hp: 1, lp: 1, bass: 1, xover: 1, shape: 1, spread: 1, diff: 1, spin: 1, wander: 1, early: 1, lexmix: 1, lexmode: 1, shim_on: 1, rspec: 1 };
 var MEAS_D = { dtime: 1, dfb: 1, dshift: 1, dshim: 1, ddamp: 1, dxfb: 1, dwide: 1, dtap2: 1, dratio2: 1, dvoices: 1, dslope: 1, dwander: 1, dspin: 1, ddiff: 1, dtype: 1, dhold: 1, dduck: 1, dthr: 1, dsmear: 1, dmod: 1, drate: 1 };
@@ -1025,6 +1028,10 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
   var rs = $("#rigSrc"), rg = $("#rigGain");
   mkSel(rs, "src", "Test signal", [["pluck", "Saw pluck chords 100"], ["snare", "Snare hits 120"], ["hoover", "Hoover lead 140"], ["hard", "Hardstyle loop 150"], ["click", "Single click (hear the tail)"], ["pink", "Pink noise"], ["file", "Your file"]], "Pick what the preview rig plays into the plugin. 'Single click' is the cleanest way to hear a reverb tail or the echo train. 'Your file' uses the file you loaded.");
   mkKnob(rg, { id: "trim", label: "Input trim", min: -24, max: 12, step: 0.1, def: 0, mid: 0, fmt: fmtDb, tip: "Level into the plugin, like the gain of the track in your DAW." });
+  var lb = $("#limBox");
+  mkTog(lb, "w_lim", "Limiter", "Master limiter at the very end of the plugin, after everything else (dry and effects together). It stops the output from going past the Out ceiling. In raises the level going into the limiter (the more you push, the louder and denser it gets); Out is the ceiling the signal never passes. Off means the output is left alone.");
+  mkKnob(lb, { id: "lim_in", label: "In", min: -12, max: 24, step: 0.1, def: 0, mid: 0, color: COL.acc, fmt: fmtDb, tip: "Gain into the limiter, in dB. Push it up to make the output louder and denser; the limiter keeps the peaks under the Out ceiling. Only active when the Limiter is on." });
+  mkKnob(lb, { id: "lim_out", label: "Out", min: -12, max: 0, step: 0.1, def: -1, color: COL.acc, fmt: fmtDb, tip: "The ceiling: the output never goes above this level. -1 dB leaves a little room for the converters. Only active when the Limiter is on." });
   mkTog(rg, "byp", "Compare: bypass", "Hear the unprocessed signal at the same moment. This is the preview rig, not a plugin control.");
 
   function grp(host, n, title, sub, cls) { var d = document.createElement("div"); d.className = "g3" + (cls ? " " + cls : ""); d.innerHTML = '<div class="gh"><i>' + n + '</i>' + title + ' <small>' + sub + '</small></div>'; host.appendChild(d); return d; }
@@ -1044,8 +1051,9 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
   KW.shift2 = mkKnob(g2, { id: "shift2", label: "Pitch 2", min: -12, max: 12, step: 1, def: 7, mid: 0, color: COL.acc, fmt: fmtSt, tip: "Second shimmer pitch. +7 is a fifth up." });
   KW.shimmer2 = mkKnob(g2, { id: "shimmer2", label: "Mix 2", min: 0, max: 1, step: 0.01, def: 0, color: COL.acc, fmt: fmtPct, tip: "Mix of the second shimmer voice. 0 means it is off." });
   mkKnob(g3, { id: "damp", label: "Damping", min: 500, max: 16000, log: true, def: 6000, color: COL.blue, fmt: fmtHz, tip: "How fast the highs die away inside the tail. Lower is darker and warmer. Also draggable on the Tone view." });
-  mkKnob(g3, { id: "hp", label: "Wet HP", min: 20, max: 2000, log: true, def: 20, color: COL.blue, fmt: fmtHz, tip: "Removes lows from the reverb only. Around 200 to 300 Hz keeps a lead tail clean. Also draggable on the Tone view." });
-  mkKnob(g3, { id: "lp", label: "Wet LP", min: 1000, max: 20000, log: true, def: 20000, color: COL.blue, fmt: fmtHz, tip: "Removes highs from the reverb only. Also draggable on the Tone view." });
+  mkKnob(g3, { id: "hp", label: "Wet HP", min: 20, max: 20000, log: true, def: 20, color: COL.blue, fmt: fmtHz, tip: "Removes lows from the reverb only. Around 200 to 300 Hz keeps a lead tail clean. Also draggable on the Tone view." });
+  mkKnob(g3, { id: "lp", label: "Wet LP", min: 20, max: 20000, log: true, def: 20000, color: COL.blue, fmt: fmtHz, tip: "Removes highs from the reverb only. Also draggable on the Tone view. HP and LP can go anywhere but never past each other." });
+  mkKnob(g3, { id: "rband", label: "Band", min: -4, max: 4, step: 0.05, def: 0, mid: 0, color: COL.blue, fmt: function (v) { return (v > 0.004 ? "+" : "") + v.toFixed(2) + " oct"; }, tip: "Moves Wet HP and Wet LP together, in octaves (+1 doubles both frequencies). Handy for sweeping a band-pass." });
   mkKnob(g3, { id: "mix", label: "Mix", min: 0, max: 1, step: 0.01, def: 0.35, color: COL.pink, fmt: fmtPct, tip: "Dry/wet. 0 is the dry signal only, 100 % is the reverb only." });
   var LK = [
     ["lexmix", "Mix", 0, 1, 0.01, 0, false, fmtPct, "Lexicat mix: how much Lexicat is mixed with the reverb type above. 0 is the type only, 100 % is Lexicat only, in between you hear both. With shimmer on, the shifted tail feeds both."],
@@ -1078,14 +1086,14 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
   mkTog(tg, "del_on", "Delay", "Switches the delay on or off in the routing. Off means it is bypassed where it sits.", false);
   mkTog(tg, "mod_on", "Modulation", "Switches the modulation (chorus, flanger, phaser and so on) on or off in the routing. Off means it is bypassed where it sits.", false);
   mkTog(tg, "ifx_on", "Input FX", "Turns the input filter and saturation on or off.", true);
-  mkTog(tg, "w_lim", "Limiter", "A quiet safety limiter at the very end of the Wet FX box, on the effect signal only. You will not hear it until the effect gets close to 0 dB; it lets you push Level and Wet boost without clipping.", false);
   mkTog(tg, "wfx_on", "Wet FX", "Turns the saturation, squash, duck, width and boost on the effect signal on or off.", true);
   mkKnob(f3, { id: "w_drive", label: "Drive", min: 0, max: 30, step: 0.1, def: 8, color: COL.acc, fmt: function (v) { return v.toFixed(1) + " dB"; }, tip: "Soft saturation of the effect signal. Adds harmonics to the tail." });
   mkKnob(f3, { id: "w_smix", label: "Sat mix", min: 0, max: 1, step: 0.01, def: 0, color: COL.pink, fmt: fmtPct, tip: "Dry/wet of the wet saturation. 0 is off." });
   mkKnob(f3, { id: "w_width", label: "Width", min: 0, max: 2, step: 0.01, def: 1, mid: 1, color: COL.rev, fmt: function (v) { return Math.round(v * 100) + " %"; }, tip: "Stereo width of the effect only. 0 is mono, 200 % is extra wide." });
   mkKnob(f3, { id: "w_boost", label: "Wet boost", min: 0, max: 12, step: 0.1, def: 0, color: COL.pink, fmt: fmtDb, tip: "Raises the effect level only, after the other wet FX. The easy way to make the reverb or delay louder." });
-  mkKnob(f2, { id: "i_hp", label: "Input HP", min: 20, max: 2000, log: true, def: 20, color: COL.blue, fmt: fmtHz, tip: "Cuts lows before they reach the effects. Keeps the tail clear of the bass." });
-  mkKnob(f2, { id: "i_lp", label: "Input LP", min: 1000, max: 20000, log: true, def: 20000, color: COL.blue, fmt: fmtHz, tip: "Cuts highs before they reach the effects." });
+  mkKnob(f2, { id: "i_hp", label: "Input HP", min: 20, max: 20000, log: true, def: 20, color: COL.blue, fmt: fmtHz, tip: "Cuts lows before they reach the effects. Keeps the tail clear of the bass." });
+  mkKnob(f2, { id: "i_lp", label: "Input LP", min: 20, max: 20000, log: true, def: 20000, color: COL.blue, fmt: fmtHz, tip: "Cuts highs before they reach the effects. HP and LP can go anywhere but never past each other." });
+  mkKnob(f2, { id: "i_band", label: "Band", min: -4, max: 4, step: 0.05, def: 0, mid: 0, color: COL.blue, fmt: function (v) { return (v > 0.004 ? "+" : "") + v.toFixed(2) + " oct"; }, tip: "Moves Input HP and Input LP together, in octaves (+1 doubles both frequencies). Handy for sweeping a band-pass." });
   mkKnob(f2, { id: "i_drive", label: "Drive", min: 0, max: 30, step: 0.1, def: 6, color: COL.acc, fmt: function (v) { return v.toFixed(1) + " dB"; }, tip: "Saturation on the signal that feeds the effects. Antialiased." });
   mkKnob(f2, { id: "i_mix", label: "Sat mix", min: 0, max: 1, step: 0.01, def: 0, color: COL.pink, fmt: fmtPct, tip: "Dry/wet of the input saturation. 0 is off." });
   mkKnob(f4, { id: "w_depth", label: "Depth", min: 0, max: 1, step: 0.01, def: 0.6, color: COL.acc, fmt: fmtPct, tip: "How hard the three bands are pushed: quiet parts up, loud parts down. Makes tails dense and bright (OTT style)." });
@@ -1169,9 +1177,9 @@ function dimGroups() {
 }
 
 /* ---------- audio engine ---------- */
-var E = { node: null, inG: null, pre: null, post: null, srcNode: null, playing: false, fileBuf: null, cache: {}, ru: null, sd: null, md: null, clear: false, curT: 450, pk: { inL: 0, inR: 0, outL: 0, outR: 0, rms: 0 } };
+var mo2 = [0, 0], E = { lim: new MLim(), node: null, inG: null, pre: null, post: null, srcNode: null, playing: false, fileBuf: null, cache: {}, ru: null, sd: null, md: null, clear: false, curT: 450, pk: { inL: 0, inR: 0, outL: 0, outR: 0, rms: 0 } };
 function revSettings(mixOverride) {
-  return { type: S.type | 0, shimmer: !!S.shim_on, lexBlend: S.lexmix, shimmerSemis: S.shift, shimmerAmount: S.shimmer, shimmer2Semis: S.shift2, shimmer2Amount: S.shimmer2, wetHpHz: S.hp, wetLpHz: S.lp, mix: mixOverride === undefined ? S.mix : mixOverride,
+  return { type: S.type | 0, shimmer: !!S.shim_on, lexBlend: S.lexmix, shimmerSemis: S.shift, shimmerAmount: S.shimmer, shimmer2Semis: S.shift2, shimmer2Amount: S.shimmer2, wetHpHz: bandEff(S.hp, S.lp, S.rband)[0], wetLpHz: bandEff(S.hp, S.lp, S.rband)[1], mix: mixOverride === undefined ? S.mix : mixOverride,
     p: { decay: S.decay, dampHz: S.damp, preDelayMs: S.predelay, size: S.size, modDepth: S.mod, color: S.color, bass: S.bass, xoverHz: S.xover, shape: S.shape, spread: S.spread, diffusion: S.diff, spin: S.spin, wander: S.wander, early: S.early, lexMode: S.lexmode | 0, special: S.rspec }, level: mixOverride === undefined ? Math.pow(10, S.rlevel / 20) : 1 };
 }
 /* how much of the dry stays: every unit that is on takes (1 - its mix); side by side stages average */
@@ -1203,8 +1211,8 @@ function procBlock(ev) {
   var st = GC.st, rs = revSettings(), dp = { feedback: S.dfb, shiftSemis: S.dshift, shimmerAmount: S.dshim, dampHz: S.ddamp, mix: S.dmix, level: Math.pow(10, S.dlevel / 20), timeMs: E.curT, crossFb: S.dxfb, wide: S.dwide, tap2: S.dtap2, tap2Ratio: S.dratio2, voices: S.dvoices | 0, slope: S.dslope, wander: S.dwander, spin: S.dspin, diffusion: S.ddiff, type: S.dtype | 0, hold: !!S.dhold, duck: S.dduck, duckThr: S.dthr, smear: S.dsmear, modDepth: S.dmod, modRate: S.drate };
   var mpar = [], mo = [], q8;
   for (q8 = 0; q8 < 8; q8++) { var pf = "m" + q8 + "_"; mo.push(!!S["mo" + q8]); mpar.push({ type: q8, speed: S[pf + "speed"], depth: S[pf + "depth"], voices: S[pf + "voices"] | 0, regen: S[pf + "regen"], preDelayMs: S[pf + "pre"], diffusion: S[pf + "diff"], waveform: S[pf + "wave"] | 0, phase: S[pf + "phase"], stages: S[pf + "stages"] | 0, spread: S[pf + "spread"], drive: S[pf + "drive"], minHz: S[pf + "min"], maxHz: S[pf + "max"], doppler: S[pf + "dop"], shift: S[pf + "shift"], mix: 1 }); }
-  var ip = { hp: S.i_hp, lp: S.i_lp, drive: S.i_drive, satMix: S.i_mix };
-  var wp = { satDrive: S.w_drive, satMix: S.w_smix, squashDepth: S.w_depth, squashMix: S.w_qmix, width: S.w_width, boost: S.w_boost, limit: !!S.w_lim, duck: { amt: S.w_duck, rel: S.w_drel, mode: { follow: 0, free: 1, sync: 2 }[S.w_dmode] | 0, src: { none: 0, input: 1, kick: 2, off: 3 }[S.w_dsrc] | 0, shape: S.w_dshape | 0, rate: S.w_drate, beats: S.w_dratio, bpm: S.w_bpm } };
+  var ibe = bandEff(S.i_hp, S.i_lp, S.i_band), ip = { hp: ibe[0], lp: ibe[1], drive: S.i_drive, satMix: S.i_mix };
+  var wp = { satDrive: S.w_drive, satMix: S.w_smix, squashDepth: S.w_depth, squashMix: S.w_qmix, width: S.w_width, boost: S.w_boost, duck: { amt: S.w_duck, rel: S.w_drel, mode: { follow: 0, free: 1, sync: 2 }[S.w_dmode] | 0, src: { none: 0, input: 1, kick: 2, off: 3 }[S.w_dsrc] | 0, shape: S.w_dshape | 0, rate: S.w_drate, beats: S.w_dratio, bpm: S.w_bpm } };
   var X = { ip: ip, rs: rs, dp: dp, mp: mpar, mo: mo, wp: wp, l: 0, r: 0 }, pIL = 0, pIR = 0, pOL = 0, pOR = 0, rms = 0, tgt = S.dtime, kT = 1 - Math.exp(-1 / (0.08 * sr)), byp = S.byp, a, cur, nxt, ol, or, ns = st.length;
   for (i = 0; i < len; i++) {
     var l = iL[i], r = iR[i]; X.l = l; X.r = r;
@@ -1220,6 +1228,7 @@ function procBlock(ev) {
       }
     }
     ol = cur.dl + cur.wl; or = cur.dr + cur.wr;
+    if (S.w_lim && !byp) { mo2[0] = ol; mo2[1] = or; E.lim.process(mo2, S.lim_in, S.lim_out, sr); ol = mo2[0]; or = mo2[1]; } else E.lim.g = 1;
     if (byp) { ol = l; or = r; }
     if (!(ol === ol) || !(or === or) || Math.abs(ol) > 50 || Math.abs(or) > 50) { E.ru.reset(); E.sd.reset(); resetMd(); ol = 0; or = 0; }
     oL[i] = ol; oR[i] = or;
@@ -1230,7 +1239,7 @@ function procBlock(ev) {
 function ensureAudio() {
   if (ctx) return true; if (!AC) return false;
   ctx = new AC(); sr = ctx.sampleRate;
-  E.ru = new RUnit(); E.ru.prepare(sr); E.sd = new SDelay(); E.sd.prepare(sr); E.md = []; for (var q = 0; q < 8; q++) { var mf = new ModFx(); mf.prepare(sr); E.md.push(mf); } E.ifx = new InFx(); E.ifx.prepare(sr); E.wfx = new WetFx(); E.wfx.prepare(sr); E.curT = S.dtime;
+  E.ru = new RUnit(); E.ru.prepare(sr); E.sd = new SDelay(); E.sd.prepare(sr); E.md = []; for (var q = 0; q < 8; q++) { var mf = new ModFx(); mf.prepare(sr); E.md.push(mf); } E.ifx = new InFx(); E.ifx.prepare(sr); E.wfx = new WetFx(); E.wfx.prepare(sr); E.lim = new MLim(); E.curT = S.dtime;
   E.inG = gn(lin(S.trim)); E.pre = mkAn(8192, 0.82); E.post = mkAn(8192, 0.82);
   E.node = ctx.createScriptProcessor(2048, 2, 2); E.node.onaudioprocess = procBlock;
   E.inG.connect(E.pre); E.inG.connect(E.node); E.node.connect(E.post); E.node.connect(ctx.destination);
@@ -1330,7 +1339,9 @@ function setModeUI() {
 }
 $$(".modes button").forEach(function (b) { b.addEventListener("click", function () { setParam("mode", b.getAttribute("data-mode"), true); }); });
 
+function bandEff(hp, lp, b) { var k = Math.pow(2, b || 0), h = clamp(hp * k, 20, 20000), l = clamp(lp * k, 20, 20000); return [Math.min(h, l), l]; }
 function onParam(id, v, fromUI) {
+  if (!inLoad && !PRE.applying) { var pr = { hp: ["lp", 1], lp: ["hp", -1], i_hp: ["i_lp", 1], i_lp: ["i_hp", -1] }[id]; if (pr && (pr[1] > 0 ? v > S[pr[0]] : v < S[pr[0]])) { setParam(id, S[pr[0]], true); return; } }
   if (/^mo[0-7]$/.test(id) && v && fromUI && !S.mod_on) setParam("mod_on", true, true);
   if (id === "m_type") loadPage(); else if (!inLoad && id.indexOf("m_") === 0 && MKEYS.indexOf(id.slice(2)) >= 0) S["m" + (S.m_type | 0) + "_" + id.slice(2)] = v;
   if (id === "trim" && E.inG) E.inG.gain.setTargetAtTime(lin(v), ctx.currentTime, 0.02);
@@ -1473,7 +1484,7 @@ function drawSpec(c) {
     g.beginPath(); for (i = 0; i < a.length; i++) { px = P.l + i * 2; py = Y(a[i]); if (i) g.lineTo(px, py); else g.moveTo(px, py); } g.strokeStyle = "#aab0c0"; g.lineWidth = 1.2; g.stroke(); g.lineWidth = 1;
   } else { g.fillStyle = "#8f93a3"; g.textAlign = "center"; g.textBaseline = "middle"; g.font = "15px 'Barlow Condensed',sans-serif"; g.fillText("Press Play to see the spectrum. You can already drag the lines.", w / 2, h / 2); }
   if (rev) {   /* wet filter response (one pole each, as in the DSP) */
-    g.beginPath(); for (var x = 0; x <= pw; x += 3) { var f = xfp(x, pw), rl = f / S.lp, rh = f / S.hp, gl = 1 / Math.sqrt(1 + rl * rl), gh = (rh) / Math.sqrt(1 + rh * rh), db = 20 * Math.log10(gl * gh + 1e-6); var yy = Y(db * 1 - 3); if (x) g.lineTo(P.l + x, yy); else g.moveTo(P.l + x, yy); }
+    g.beginPath(); for (var x = 0; x <= pw; x += 3) { var f = xfp(x, pw), rl = f / bandEff(S.hp, S.lp, S.rband)[1], rh = f / bandEff(S.hp, S.lp, S.rband)[0], gl = 1 / Math.sqrt(1 + rl * rl), gh = (rh) / Math.sqrt(1 + rh * rh), db = 20 * Math.log10(gl * gh + 1e-6); var yy = Y(db * 1 - 3); if (x) g.lineTo(P.l + x, yy); else g.moveTo(P.l + x, yy); }
     g.strokeStyle = "#6CC9F5aa"; g.setLineDash([2, 3]); g.stroke(); g.setLineDash([]);
   }
   var L = specLines(); GEO = { kind: "spec", P: P, pw: pw, ph: ph, L: L };
@@ -1500,7 +1511,7 @@ var VR = {
   decay: { min: 0, max: 1.55, step: 0.01, fmt: fmtDec }, predelay: { min: 0, max: 250, step: 1, fmt: fmtMs }, mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
   dtime: { min: 20, max: 2000, log: true, fmt: fmtMs }, dfb: { min: 0, max: 0.95, step: 0.01, fmt: fmtPct }, dmix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
   m_speed: { min: 0.05, max: 20, log: true, fmt: function (v) { return v.toFixed(2) + " Hz"; } }, m_depth: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, m_mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, m_level: { min: -12, max: 12, step: 0.1, fmt: fmtDb },
-  i_hp: { min: 20, max: 2000, log: true, fmt: fmtHz }, i_lp: { min: 1000, max: 20000, log: true, fmt: fmtHz }, i_mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
+  i_hp: { min: 20, max: 20000, log: true, fmt: fmtHz }, i_lp: { min: 20, max: 20000, log: true, fmt: fmtHz }, i_mix: { min: 0, max: 1, step: 0.01, fmt: fmtPct },
   w_boost: { min: 0, max: 12, step: 0.1, fmt: fmtDb }, w_duck: { min: 0, max: 1, step: 0.01, fmt: fmtPct }, w_width: { min: 0, max: 2, step: 0.01, fmt: fmtPct }
 };
 function vrN(id, v) { var c = VR[id]; return c.log ? Math.log(v / c.min) / Math.log(c.max / c.min) : (v - c.min) / (c.max - c.min); }
@@ -1657,7 +1668,7 @@ cv.addEventListener("pointermove", function (e) {
       var b1 = M.del.bars[0], b2 = M.del.bars[1], y1 = P.t + (-clamp(b1.db, -60, 0)) / 60 * GEO.ph, bot = P.t + GEO.ph, target = clamp((bot - p.y) / Math.max(8, bot - y1), 0.02, 1.2), cur2 = Math.pow(10, (b2.db - b1.db) / 20);
       setParam("dfb", clamp(Math.round(S.dfb * (target / Math.max(cur2, 0.02)) * 100) / 100, 0, 0.95), true);
     }
-  } else if (drag.k === "spec") { var ln = drag.ln, f = xfp(clamp(p.x - P.l, 0, GEO.pw), GEO.pw), lo = { hp: 20, damp: 500, lp: 1000, ddamp: 500, i_hp: 20, i_lp: 1000 }[ln.id], hi = { hp: 2000, damp: 16000, lp: 20000, ddamp: 16000, i_hp: 2000, i_lp: 20000 }[ln.id]; setParam(ln.id, Math.round(clamp(f, lo, hi)), true); }
+  } else if (drag.k === "spec") { var ln = drag.ln, f = xfp(clamp(p.x - P.l, 0, GEO.pw), GEO.pw), lo = { hp: 20, damp: 500, lp: 20, ddamp: 500, i_hp: 20, i_lp: 20 }[ln.id], hi = { hp: 20000, damp: 16000, lp: 20000, ddamp: 16000, i_hp: 20000, i_lp: 20000 }[ln.id]; setParam(ln.id, Math.round(clamp(f, lo, hi)), true); }
 });
 function endDrag() {
   if (!drag) return; var d = drag;
@@ -1707,7 +1718,7 @@ PAINT.push(function (dt, ts) {
 });
 
 /* ---------- factory presets ---------- */
-function rp(name, o) { var v = { type: 1, shim_on: true, decay: 0.6, damp: 6000, predelay: 20, size: 1, mod: 0.5, color: 0, shift: 12, shimmer: 0.5, shift2: 7, shimmer2: 0, hp: 20, lp: 20000, mix: 0.35, lexmix: 0, lexmode: 0, bass: 1.3, xover: 500, shape: 0.5, spread: 0.4, diff: 0.7, spin: 0.5, wander: 0.5, early: 0.5, rspec: 0.5, rlevel: 0 }; for (var k in o) v[k] = o[k]; return { name: name, v: v }; }
+function rp(name, o) { var v = { type: 1, shim_on: true, decay: 0.6, damp: 6000, predelay: 20, size: 1, mod: 0.5, color: 0, shift: 12, shimmer: 0.5, shift2: 7, shimmer2: 0, hp: 20, lp: 20000, rband: 0, mix: 0.35, lexmix: 0, lexmode: 0, bass: 1.3, xover: 500, shape: 0.5, spread: 0.4, diff: 0.7, spin: 0.5, wander: 0.5, early: 0.5, rspec: 0.5, rlevel: 0 }; for (var k in o) v[k] = o[k]; return { name: name, v: v }; }
 function dpr(name, o) { var v = { dtime: 450, dfb: 0.55, dshift: 12, dshim: 1, ddamp: 5000, dmix: 0.4, dxfb: 0, dwide: 0, dtap2: 0, dratio2: 0.5, dvoices: 1, dslope: 0, dwander: 0, dspin: 0.5, ddiff: 0, dlevel: 0, dtype: 0, dhold: false, dduck: 0, dthr: 0.3, dsmear: 0, dmod: 0.5, drate: 0.8 }; for (var k in o) v[k] = o[k]; return { name: name, v: v }; }
 var FACT_R = [
   rp("Shimmer Pad Bloom", { type: 1, shim_on: true, decay: 0.75, size: 1.2, shimmer: 0.45, mix: 0.4, hp: 200, lp: 9000 }),
@@ -1769,7 +1780,7 @@ var FACT_M = [
   mpr("Detune Wide", { m_type: 7, m_shift: 25, m_pre: 18 })
 ];
 var G0 = "ifx>rev|del|mod>wfx";
-function fp(name, o) { var v = { graph: G0, rev_on: true, del_on: false, mod_on: false, ifx_on: true, wfx_on: true, i_hp: 20, i_lp: 20000, i_drive: 6, i_mix: 0, w_drive: 8, w_smix: 0, w_depth: 0.6, w_qmix: 0, w_duck: 0, w_drel: 250, w_dmode: "follow", w_dsrc: "input", w_dshape: 0, w_drate: 2, w_dratio: 1, w_bpm: 140, w_width: 1, w_boost: 0, w_lim: false }; for (var k in o) v[k] = o[k]; return { name: name, v: v }; }
+function fp(name, o) { var v = { graph: G0, rev_on: true, del_on: false, mod_on: false, ifx_on: true, wfx_on: true, i_hp: 20, i_lp: 20000, i_band: 0, i_drive: 6, i_mix: 0, w_drive: 8, w_smix: 0, w_depth: 0.6, w_qmix: 0, w_duck: 0, w_drel: 250, w_dmode: "follow", w_dsrc: "input", w_dshape: 0, w_drate: 2, w_dratio: 1, w_bpm: 140, w_width: 1, w_boost: 0, w_lim: false, lim_in: 0, lim_out: -1 }; for (var k in o) v[k] = o[k]; return { name: name, v: v }; }
 var FACT_F = [
   fp("Clean (reverb only)", {}),
   fp("Delay only", { rev_on: false, del_on: true }),

@@ -99,7 +99,7 @@ private:
     float sr_ = 48000, env_ = 0, ph_ = 1, gs_ = 1; bool armed_ = true; int cool_ = 0;
 };
 
-struct WetParams { float satDrive = 8, satMix = 0, squashDepth = 0.6f, squashMix = 0, width = 1, boostDb = 0; bool limit = false; DuckParams duck; };
+struct WetParams { float satDrive = 8, satMix = 0, squashDepth = 0.6f, squashMix = 0, width = 1, boostDb = 0; DuckParams duck; };
 class WetFx {
 public:
     void prepare(float sr) { sr_ = sr; ad_ = Adaa(); l1_ = OnePole(); l2_ = OnePole(); for (auto& e : env_) e[0] = e[1] = 0; duck_.prepare(sr); }
@@ -115,21 +115,10 @@ public:
         const float m = 0.5f * (w[0] + w[1]), sd = 0.5f * (w[0] - w[1]) * p.width; w[0] = m + sd; w[1] = m - sd;
         const float dg = duck_.tick(dl, dr, p.duck), bg = std::pow(10.f, p.boostDb / 20.f);
         oL = w[0] * dg * bg; oR = w[1] * dg * bg;
-        if (p.limit) limiter(oL, oR); else limG_ = 1.f;
     }
     float oL = 0, oR = 0, gdb[3] = {0, 0, 0};
     const Duck& duck() const { return duck_; }
 private:
-    // Safety limiter at the very end of the wet chain (effect signal only): a fast stereo-linked gain limiter at -1 dBFS (0.3 ms attack, 120 ms release),
-    // then a soft knee that only bends peaks above 0.9, so normal levels pass untouched. Off by default.
-    void limiter(float& l, float& r) {
-        const float pk = std::max(std::fabs(l), std::fabs(r)), thr = 0.891f, tgt = pk > thr ? thr / pk : 1.f;
-        const float a = tgt < limG_ ? 1.f - std::exp(-1.f / (0.0003f * sr_)) : 1.f - std::exp(-1.f / (0.12f * sr_));
-        limG_ += a * (tgt - limG_); l *= limG_; r *= limG_;
-        auto soft = [](float x) { const float ax = std::fabs(x); if (ax <= 0.9f) return x; const float y = 0.9f + 0.1f * std::tanh((ax - 0.9f) / 0.1f); return x < 0.f ? -y : y; };
-        l = soft(l); r = soft(r);
-    }
-    float limG_ = 1.f;
     float squash(int c, float x, float depth) {
         const float k1 = 1.f - std::exp(-6.2831853f * 130.f / sr_), k2 = 1.f - std::exp(-6.2831853f * 2800.f / sr_);
         const float lo = l1_.lp(c, x, k1), m2 = l2_.lp(c, x, k2), bands[3] = {lo, m2 - lo, x - m2};
@@ -311,12 +300,30 @@ inline std::string graphString(const Graph& g) {
 
 struct GState { float dl = 0, dr = 0, xl = 0, xr = 0, wl = 0, wr = 0; bool hw = false; };
 
+// Master limiter at the very end of the plugin (dry and effects together): In gain, then a fast stereo-linked gain limiter that holds the output at the
+// Out ceiling (0.3 ms attack, 120 ms release), then a soft knee over the last 5 % so nothing passes the ceiling. Off = untouched. Mirrors MLim in the mockup.
+struct MasterLimiter {
+    void prepare(float sr) { sr_ = sr; g_ = 1.f; }
+    void process(float& l, float& r, float inDb, float outDb) {
+        const float k = std::pow(10.f, inDb / 20.f), c = std::pow(10.f, outDb / 20.f); l *= k; r *= k;
+        const float pk = std::max(std::fabs(l), std::fabs(r)), tgt = pk > c ? c / pk : 1.f;
+        const float a = tgt < g_ ? 1.f - std::exp(-1.f / (0.0003f * sr_)) : 1.f - std::exp(-1.f / (0.12f * sr_));
+        g_ += a * (tgt - g_); l *= g_; r *= g_;
+        auto soft = [c](float x) { const float ax = std::fabs(x) / c; if (ax <= 0.95f) return x; const float y = (0.95f + 0.05f * std::tanh((ax - 0.95f) / 0.05f)) * c; return x < 0.f ? -y : y; };
+        l = soft(l); r = soft(r);
+    }
+    void idle() { g_ = 1.f; }
+private:
+    float sr_ = 48000.f, g_ = 1.f;
+};
+
 struct Engine {
     wm::engine::ReverbUnit rev; wm::engine::ShimmerDelay del; InFx ifx; WetFx wfx; ModFx mods[kModFx];
     // per block settings
     wm::engine::ReverbSettings rs; wm::engine::ShimmerDelayParams dp; InParams ip; WetParams wp; ModParams mps[kModFx]; bool modUse[kModFx] = {true}; float modMix = 1.0f, modLevel = 1.0f;
     bool revOn = true, delOn = false, ifxOn = true, wfxOn = true, modOn = false;
-    void prepare(float sr) { rev.prepare(sr); del.prepare(sr); ifx.prepare(sr); wfx.prepare(sr); for (auto& m : mods) m.prepare(sr); }
+    MasterLimiter lim; bool limOn = false; float limInDb = 0.f, limOutDb = -1.f;
+    void prepare(float sr) { rev.prepare(sr); del.prepare(sr); ifx.prepare(sr); wfx.prepare(sr); lim.prepare(sr); for (auto& m : mods) m.prepare(sr); }
     void reset() { rev.reset(); del.reset(); for (auto& m : mods) m.reset(); }
     // One sample. l, r: dry input. tl, tr: duck trigger (the dry input, or the sidechain). Returns output in ol, or.
     void tick(const Graph& g, float l, float r, float tl, float tr, float& ol, float& orr) {
@@ -337,6 +344,7 @@ struct Engine {
         }
         ol = a.dl + a.wl; orr = a.dr + a.wr;
         if (!std::isfinite(ol) || !std::isfinite(orr) || std::fabs(ol) > 50.f || std::fabs(orr) > 50.f) { reset(); ol = orr = 0; }
+        if (limOn) lim.process(ol, orr, limInDb, limOutDb); else lim.idle();
     }
 private:
     // Each unit makes out = unit(x + w) and keeps x*(1-mix) as its dry; the wet part is what is left of the output.

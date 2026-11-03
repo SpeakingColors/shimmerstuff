@@ -29,11 +29,11 @@ const F kFloats[] = {
     { "size", "Size", 0.5f, 1.6f, 1.f, 0.f }, { "mod", "Modulation", 0.f, 1.f, 0.5f, 0.f }, { "color", "Velvet colour", -1.f, 1.f, 0.f, 0.f },
     { "shift", "Shimmer pitch", -12.f, 12.f, 12.f, 0.f }, { "shimmer", "Shimmer amount", 0.f, 1.f, 0.5f, 0.f },
     { "shift2", "Shimmer 2 pitch", -12.f, 12.f, 7.f, 0.f }, { "shimmer2", "Shimmer 2 amount", 0.f, 1.f, 0.f, 0.f },
-    { "hp", "Wet high-pass", 20.f, 2000.f, 20.f, 150.f }, { "lp", "Wet low-pass", 1000.f, 20000.f, 20000.f, 6000.f }, { "mix", "Reverb mix", 0.f, 1.f, 0.35f, 0.f },
+    { "hp", "Wet high-pass", 20.f, 20000.f, 20.f, 400.f }, { "lp", "Wet low-pass", 20.f, 20000.f, 20000.f, 2500.f }, { "mix", "Reverb mix", 0.f, 1.f, 0.35f, 0.f },
     { "dtime", "Delay time", 20.f, 2000.f, 450.f, 400.f }, { "dfb", "Delay feedback", 0.f, 0.95f, 0.55f, 0.f },
     { "dshift", "Delay shift", -12.f, 12.f, 12.f, 0.f }, { "dshim", "Delay shimmer", 0.f, 1.f, 1.f, 0.f },
     { "ddamp", "Delay damping", 500.f, 16000.f, 5000.f, 3000.f }, { "dmix", "Delay mix", 0.f, 1.f, 0.4f, 0.f },
-    { "i_hp", "Input high-pass", 20.f, 2000.f, 20.f, 150.f }, { "i_lp", "Input low-pass", 1000.f, 20000.f, 20000.f, 6000.f },
+    { "i_hp", "Input high-pass", 20.f, 20000.f, 20.f, 400.f }, { "i_lp", "Input low-pass", 20.f, 20000.f, 20000.f, 2500.f }, { "lim_in", "Limiter in", -12.f, 24.f, 0.f, 0.f }, { "lim_out", "Limiter out", -12.f, 0.f, -1.f, 0.f }, { "i_band", "Input band shift", -4.f, 4.f, 0.f, 0.f }, { "rband", "Wet band shift", -4.f, 4.f, 0.f, 0.f },
     { "i_drive", "Input drive", 0.f, 30.f, 6.f, 0.f }, { "i_mix", "Input saturation mix", 0.f, 1.f, 0.f, 0.f },
     { "w_drive", "Wet drive", 0.f, 30.f, 8.f, 0.f }, { "w_smix", "Wet saturation mix", 0.f, 1.f, 0.f, 0.f },
     { "w_depth", "Squash depth", 0.f, 1.f, 0.6f, 0.f }, { "w_qmix", "Squash mix", 0.f, 1.f, 0.f, 0.f },
@@ -277,7 +277,7 @@ void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::Mi
     rs.lexBlend = get("lexmix"); rs.p.lexMode = juce::jlimit(0, 4, (int) get("lexmode")); rs.shimmer = get("shim_on") > .5f;
     rs.p.spin = get("spin"); rs.p.wander = get("wander"); rs.p.early = get("early");
     rs.shimmerSemis = get("shift"); rs.shimmerAmount = get("shimmer"); rs.shimmer2Semis = get("shift2"); rs.shimmer2Amount = get("shimmer2");
-    rs.wetHpHz = get("hp"); rs.wetLpHz = get("lp");
+    { const float k = std::pow(2.f, get("rband")); rs.wetLpHz = juce::jlimit(20.f, 20000.f, get("lp") * k); rs.wetHpHz = juce::jmin(juce::jlimit(20.f, 20000.f, get("hp") * k), rs.wetLpHz); }
     auto& dp = eng.dp; dp.shiftSemis = get("dshift"); dp.shimmerAmount = get("dshim"); dp.dampHz = get("ddamp");
     dp.voices = juce::jlimit(1, 8, (int) std::lround(get("dvoices"))); dp.slope = get("dslope"); dp.wander = get("dwander"); dp.spin = get("dspin"); dp.diffusion = get("ddiff");
     dp.type = juce::jlimit(0, 4, (int) get("dtype")); dp.hold = get("dhold") > .5f; dp.duck = get("dduck"); dp.duckThr = get("dthr"); dp.smear = get("dsmear"); dp.modDepth = get("dmod"); dp.modRate = get("drate");
@@ -288,8 +288,9 @@ void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::Mi
         m.phase = v(8); m.spread = v(9); m.drive = v(10); m.minHz = v(11); m.maxHz = v(12); m.doppler = v(13); m.shift = v(14);
     }
     dp.crossFb = get("dxfb"); dp.wide = get("dwide"); dp.tap2 = get("dtap2"); dp.tap2Ratio = get("dratio2");
-    eng.ip.hp = get("i_hp"); eng.ip.lp = get("i_lp"); eng.ip.drive = get("i_drive");
-    auto& wp = eng.wp; wp.limit = get("w_lim") > .5f; wp.satDrive = get("w_drive"); wp.squashDepth = get("w_depth");
+    { const float k = std::pow(2.f, get("i_band")); eng.ip.lp = juce::jlimit(20.f, 20000.f, get("i_lp") * k); eng.ip.hp = juce::jmin(juce::jlimit(20.f, 20000.f, get("i_hp") * k), eng.ip.lp); } eng.ip.drive = get("i_drive");
+    eng.limOn = get("w_lim") > .5f; eng.limInDb = get("lim_in"); eng.limOutDb = get("lim_out");
+    auto& wp = eng.wp; wp.satDrive = get("w_drive"); wp.squashDepth = get("w_depth");
     auto& dk = wp.duck; dk.relMs = get("w_drel"); dk.rateHz = get("w_drate"); dk.mode = juce::jlimit(0, 2, (int) get("w_dmode")); dk.shape = (int) get("w_dshape");
     dk.beats = kRatioBeats[juce::jlimit(0, 6, (int) get("w_dratio"))];
     double bpm = 120.0;

@@ -37,7 +37,7 @@ public:
 
 struct Knob : public juce::Component
 {
-    enum Kind { Pct, Size, Ms, Hz, St, Db, Plain, Int, Wave, Dec, Spec };
+    enum Kind { Pct, Size, Ms, Hz, St, Db, Plain, Int, Wave, Dec, Spec, Oct };
     std::function<int()> typeFn;              // Dec only: the reverb type, because the same decay value is a different time per type
     juce::Slider s { juce::Slider::RotaryVerticalDrag, juce::Slider::NoTextBox };
     juce::Label name, val;
@@ -223,7 +223,7 @@ private:
     std::vector<float> selSnap[4]; juce::String selLabel[4];
     DecayView decay; ToneView toneRev, toneDel, toneFx, toneMod; ModView modv; EchoView echo; RouteView route; ShapeView shape; LevelMeter meter;
     Combo rType, rMode, lay, dMode, dSrc, dRatio, dType, mType;
-    Knob rk[24], dk[21], ik[4], wk[6], dukn[3], mk[15], mMix, mLevel;
+    Knob rk[25], dk[21], ik[5], wk[6], dukn[3], mk[15], mMix, mLevel, limIn, limOut;
     juce::TextButton shimTog { "SHIMMER ON" }, onBtn[5], revOn { "ON" }, delOn { "ON" }, holdTog { "HOLD" }, limTog { "LIMITER" }, modOn { "ON" }, chip[8];
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aOn[5], aRev, aDel, aShim, aHold, aLim, aModOn, aChip[8];
     void syncEdit();                 // Modulation tab: aim the knobs at the effect chosen in "Edit effect"
