@@ -161,6 +161,9 @@ button[aria-pressed="true"] { background:#241238; border-color:var(--cL); color:
 .g3 .gh small { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .g3 .fld { align-self:center; }
 .g3.lex .kw { width:72px; }
+.g3.tight .kw { width:80px; }
+.g3.tight { gap:0; }
+.g3.sh .kw { width:66px; }
 .g3.mod2 .kw { width:70px; }
 .g3.mod2 .fld select { min-width:90px; }
 .g3.lex .fld select { min-width:96px; }
@@ -820,7 +823,7 @@ RUnit.prototype.reset = function () { this.plate.reset(); this.hall.reset(); thi
 RUnit.prototype.process = function (inL, inR, s) {
   var shim = !!s.shimmer, ratio = Math.pow(2, s.shimmerSemis / 12), fl = inL, fr = inR;
   if (shim) {
-    var g = 0.4 * Math.min(1, Math.max(0, s.shimmerAmount)), g2 = 0.4 * Math.min(1, Math.max(0, s.shimmer2Amount));
+    var sg = s.shGain === undefined ? 1 : s.shGain, g = 0.4 * Math.min(1, Math.max(0, s.shimmerAmount)) * sg, g2 = 0.4 * Math.min(1, Math.max(0, s.shimmer2Amount)) * sg;
     if (g + g2 > 0.4) { var kk = 0.4 / (g + g2); g *= kk; g2 *= kk; }
     fl += g * this.ps[0].tick(this.last[0], ratio); fr += g * this.ps[1].tick(this.last[1], ratio);
     if (s.shimmer2Amount > 0) { var r2 = Math.pow(2, s.shimmer2Semis / 12); fl += g2 * this.qs[0].tick(this.last[0], r2); fr += g2 * this.qs[1].tick(this.last[1], r2); }
@@ -845,7 +848,8 @@ RUnit.prototype.process = function (inL, inR, s) {
       wl *= this.gG; wr *= this.gG;
     } else if (ty === 8) { this.rvw.process(wl, wr, s.p.special); wl = this.rvw.oL; wr = this.rvw.oR; }
   }
-  if (bl > 0.001) { this.lex.process(fl, fr, s.p); xl = this.lex.oL; xr = this.lex.oR; }
+  var spg = s.spGain === undefined ? 1 : s.spGain; wl *= spg; wr *= spg;
+  if (bl > 0.001) { var lxg = s.lxGain === undefined ? 1 : s.lxGain; this.lex.process(fl, fr, s.p); xl = this.lex.oL * lxg; xr = this.lex.oR * lxg; }
   this.last[0] = Math.tanh(wl * (1 - bl) + xl * bl / LXLEVEL); this.last[1] = Math.tanh(wr * (1 - bl) + xr * bl / LXLEVEL);   /* feedback tap keeps the old loop gain */
   wl = wl * (1 - bl) + xl * bl; wr = wr * (1 - bl) + xr * bl;
   if (s.wetHpHz > 20.5 || s.wetLpHz < 19999) {
@@ -986,7 +990,7 @@ function mdef(t, k) { var d = MDEF[t]; return d && k in d ? d[k] : MBASE[k]; }
 for (var mt0 = 0; mt0 < 8; mt0++) { MKEYS.forEach(function (k) { def("m" + mt0 + "_" + k, mdef(mt0, k)); }); def("mo" + mt0, mt0 === 0); } def("rev_on", true); def("del_on", false); def("ifx_on", true); def("wfx_on", true); def("i_hp", 20); def("i_lp", 20000); def("i_band", 0); def("i_drive", 6); def("i_mix", 0); def("w_drive", 8); def("w_smix", 0); def("w_depth", 0.6); def("w_qmix", 0); def("w_duck", 0); def("w_drel", 250); def("w_dmode", "follow"); def("w_dsrc", "input"); def("w_dshape", 0); def("w_drate", 2); def("w_dratio", 1); def("w_bpm", 140); def("w_width", 1); def("w_boost", 0); def("w_lim", false);
 def("lexmix", 0); def("lexmode", 0); def("shim_on", true); def("bass", 1.3); def("xover", 500); def("shape", 0.5); def("spread", 0.4); def("diff", 0.7); def("spin", 0.5); def("wander", 0.5); def("early", 0.5); def("dxfb", 0); def("dwide", 0); def("dtap2", 0); def("dratio2", 0.5); def("dvoices", 1); def("dslope", 0); def("dwander", 0); def("dspin", 0.5); def("ddiff", 0);
 def("dtime", 450); def("dfb", 0.55); def("dshift", 12); def("dshim", 1); def("ddamp", 5000); def("dmix", 0.4);
-var RK = ["rev_on", "type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "rband", "mix", "bass", "xover", "shape", "spread", "diff", "spin", "wander", "early", "lexmix", "lexmode", "shim_on", "rspec", "rlevel"];
+var RK = ["rev_on", "type", "decay", "damp", "predelay", "size", "mod", "color", "shift", "shimmer", "shift2", "shimmer2", "hp", "lp", "rband", "mix", "bass", "xover", "shape", "spread", "diff", "spin", "wander", "early", "lexmix", "lexmode", "shim_on", "rspec", "rlevel", "splevel", "shlevel", "lxlevel"];
 var DK = ["del_on", "dtime", "dfb", "dshift", "dshim", "ddamp", "dmix", "dxfb", "dwide", "dtap2", "dratio2", "dvoices", "dslope", "dwander", "dspin", "ddiff", "dtype", "dhold", "dduck", "dthr", "dsmear", "dmod", "drate", "dlevel"];
 var MDK = ["mod_on", "m_mix", "m_level"]; for (var mt1 = 0; mt1 < 8; mt1++) { MDK.push("mo" + mt1); MKEYS.forEach(function (k) { MDK.push("m" + mt1 + "_" + k); }); } MDK.push("m_type");
 var FK = ["graph", "rev_on", "del_on", "mod_on", "ifx_on", "wfx_on", "i_hp", "i_lp", "i_band", "i_drive", "i_mix", "w_drive", "w_smix", "w_depth", "w_qmix", "w_duck", "w_drel", "w_dmode", "w_dsrc", "w_dshape", "w_drate", "w_dratio", "w_bpm", "w_width", "w_boost", "w_lim", "lim_in", "lim_out"];
@@ -1042,7 +1046,7 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
 
   function grp(host, n, title, sub, cls) { var d = document.createElement("div"); d.className = "g3" + (cls ? " " + cls : ""); d.innerHTML = '<div class="gh"><i>' + n + '</i>' + title + ' <small>' + sub + '</small></div>'; host.appendChild(d); return d; }
   var R = $("#fxR"), D = $("#fxD");
-  var g1 = grp(R, 1, "Space", "type and size of the room", "wide"), g2 = grp(R, 2, "Shimmer", "pitch shifted copy fed into the tail"), g3 = grp(R, 3, "Tone and mix", "what reaches the output"), g4 = grp(R, 4, "Lexicat", "our second reverb engine, runs side by side with the type above", "wide lex");
+  var g1 = grp(R, 1, "Space", "type and size of the room", "wide"), g2 = grp(R, 2, "Shimmer", "pitch shifted copy fed into the tail", "tight sh"), g3 = grp(R, 3, "Tone and mix", "what reaches the output", "tight"), g4 = grp(R, 4, "Lexicat", "our second reverb engine, runs side by side with the type above", "wide lex");
   mkTog(g1, "rev_on", "\u23FB On", "Switches the reverb on or off. Same switch as the power icon on the Reverb box in FX and Routing: the routing you chose stays active on every tab, this tab is only for fine tuning.", true, "pwr");
   mkSel(g1, "type", "Type", [[0, "Plate"], [1, "Hall"], [2, "Velvet"], [3, "Room"], [4, "Chamber"], [5, "Arena"], [6, "Spring"], [7, "Gated"], [8, "Reverse"]], "Plate: bright and dense, short to medium. Hall: bigger and smoother. Velvet: two halls blended, soft and dark to bright with Colour. Room: small and close. Chamber: dense, medium size. Arena: huge and wide. Spring: the boing of a spring tank. Gated: the tail is cut after a hold time (Special). Reverse: the tail swells backwards (Special sets the length). Shimmer has its own switch and works with every type. Lexicat (group 4) runs side by side with any type: turn its Blend up to mix it in.");
   mkKnob(g1, { id: "decay", label: "Decay", min: 0, max: 1.55, step: 0.01, def: 0.6, color: COL.rev, fmt: fmtDec, tip: "Length of the tail in time (RT60: how long it takes to fade by 60 dB), up to 20 s on Hall. Each type has its own range: Room tops out near 7 s, Plate and Gated near 20 s. The Decay display shows the measured result." });
@@ -1051,16 +1055,19 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
   KW.mod = mkKnob(g1, { id: "mod", label: "Modulation", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.rev, fmt: fmtPct, tip: "Slow movement inside the tail that stops it sounding metallic. Lexicat uses Spin and Wander instead." });
   KW.color = mkKnob(g1, { id: "color", label: "Colour", min: -1, max: 1, step: 0.01, def: 0, mid: 0, color: COL.rev, fmt: function (v) { return (v > 0 ? "+" : "") + Math.round(v * 100); }, tip: "Velvet type only: negative is darker, positive is brighter." });
   KW.rspec = mkKnob(g1, { id: "rspec", label: "Special", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.rev, fmt: function (v) { var t = S.type | 0; return t === 7 ? Math.round(40 + 460 * v) + " ms" : t === 8 ? Math.round(100 + 900 * v) + " ms" : t === 6 ? Math.round(v * 100) + " %" : "-"; }, tip: "Depends on the type. Gated: how long the tail is held before the cut. Reverse: length of the backwards swell. Spring: how strong the boing is. Other types ignore it." });
+  mkKnob(g1, { id: "splevel", label: "Level", min: -12, max: 12, step: 0.1, def: 0, mid: 0, color: COL.pink, fmt: fmtDb, tip: "Level of the reverb type itself (the Space section), in dB. Shimmer and Lexicat have their own Level." });
   mkTog(g2, "shim_on", "Shimmer on", "Turns the shimmer on or off for any reverb type, Lexicat included. Changing the type no longer touches it.", true);
   KW.shift = mkKnob(g2, { id: "shift", label: "Pitch", min: -12, max: 12, step: 1, def: 12, mid: 0, color: COL.acc, fmt: fmtSt, tip: "Pitch of the shimmer copy that feeds back into the tail. +12 is an octave up." });
   KW.shimmer = mkKnob(g2, { id: "shimmer", label: "Mix", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.acc, fmt: fmtPct, tip: "Shimmer mix: how much of the tail is shifted and fed back. The plugin limits the total so it cannot run away." });
   KW.shift2 = mkKnob(g2, { id: "shift2", label: "Pitch 2", min: -12, max: 12, step: 1, def: 7, mid: 0, color: COL.acc, fmt: fmtSt, tip: "Second shimmer pitch. +7 is a fifth up." });
   KW.shimmer2 = mkKnob(g2, { id: "shimmer2", label: "Mix 2", min: 0, max: 1, step: 0.01, def: 0, color: COL.acc, fmt: fmtPct, tip: "Mix of the second shimmer voice. 0 means it is off." });
+  mkKnob(g2, { id: "shlevel", label: "Level", min: -12, max: 12, step: 0.1, def: 0, mid: 0, color: COL.pink, fmt: fmtDb, tip: "Level of the shimmer voices, in dB. Raises or lowers how much shifted tail is fed back, on top of the Mix knobs." });
   mkKnob(g3, { id: "damp", label: "Damping", min: 500, max: 16000, log: true, def: 6000, color: COL.blue, fmt: fmtHz, tip: "How fast the highs die away inside the tail. Lower is darker and warmer. Also draggable on the Tone view." });
   mkKnob(g3, { id: "hp", label: "Wet HP", min: 20, max: 20000, log: true, def: 20, color: COL.blue, fmt: fmtHz, tip: "Removes lows from the reverb only. Around 200 to 300 Hz keeps a lead tail clean. Also draggable on the Tone view." });
   mkKnob(g3, { id: "lp", label: "Wet LP", min: 20, max: 20000, log: true, def: 20000, color: COL.blue, fmt: fmtHz, tip: "Removes highs from the reverb only. Also draggable on the Tone view. HP and LP can go anywhere but never past each other." });
   mkKnob(g3, { id: "rband", label: "Band", min: -4, max: 4, step: 0.05, def: 0, mid: 0, color: COL.blue, fmt: function (v) { return (v > 0.004 ? "+" : "") + v.toFixed(2) + " oct"; }, tip: "Moves Wet HP and Wet LP together, in octaves (+1 doubles both frequencies). Handy for sweeping a band-pass." });
   mkKnob(g3, { id: "mix", label: "Mix", min: 0, max: 1, step: 0.01, def: 0.35, color: COL.pink, fmt: fmtPct, tip: "Dry/wet. 0 is the dry signal only, 100 % is the reverb only." });
+  mkKnob(g3, { id: "rlevel", label: "Level", min: -12, max: 12, step: 0.1, def: 0, mid: 0, color: COL.pink, fmt: fmtDb, tip: "Level of the whole reverb (every type, Lexicat included), the wet signal only. Raise it to bring the tail forward in the mix, lower it to sit it back. 0 dB leaves it as it was." });
   var LK = [
     ["lexmix", "Mix", 0, 1, 0.01, 0, false, fmtPct, "Lexicat mix: how much Lexicat is mixed with the reverb type above. 0 is the type only, 100 % is Lexicat only, in between you hear both. With shimmer on, the shifted tail feeds both."],
     ["bass", "Bass x", 0.5, 2.5, 0.01, 1.3, false, function (v) { return "x" + v.toFixed(2); }, "Bass multiply: how much longer the lows ring than the mids. 1.0 is even, 1.5 or less sounds like a real hall, 2 gives a big boomy bottom."],
@@ -1074,7 +1081,7 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
   ];
   KW.lexmode = mkSel(g4, "lexmode", "Mode", [[0, "Hall"], [1, "Random Hall"], [2, "Plate"], [3, "Chamber"], [4, "Room"]], "Hall: stable, wide, natural build-up. Random Hall: strong random movement for a big, smooth, long tail. Plate: dense and bright from the start. Chamber: very dense, quick onset. Room: small, with early reflections up front. Every mode is level matched.");
   LK.forEach(function (q) { KW[q[0]] = mkKnob(g4, { id: q[0], label: q[1], min: q[2], max: q[3], step: q[4] || undefined, log: q[6], def: q[5], color: COL.rev, fmt: q[7], tip: q[8] }); });
-  mkKnob(g4, { id: "rlevel", label: "Level", min: -12, max: 12, step: 0.1, def: 0, mid: 0, color: COL.pink, fmt: fmtDb, tip: "Level of the whole reverb (every type, Lexicat included), the wet signal only. Raise it to bring the tail forward in the mix, lower it to sit it back. 0 dB leaves it as it was." });
+  mkKnob(g4, { id: "lxlevel", label: "Level", min: -12, max: 12, step: 0.1, def: 0, mid: 0, color: COL.pink, fmt: fmtDb, tip: "Level of Lexicat, in dB. Only matters when Lexicat Mix is above 0." });
   addUI("type", function () { UI.decay(S.decay); UI.rspec(S.rspec); var kl = $(".kl", KW.rspec), t = S.type | 0; kl.textContent = t === 7 ? "Hold" : t === 8 ? "Length" : t === 6 ? "Boing" : "Special"; dimGroups(); }); addUI("lexmix", dimGroups); addUI("shim_on", dimGroups);
 
   var F = $("#fxF");
@@ -1185,7 +1192,7 @@ function dimGroups() {
 /* ---------- audio engine ---------- */
 var mo2 = [0, 0], E = { lim: new MLim(), node: null, inG: null, pre: null, post: null, srcNode: null, playing: false, fileBuf: null, cache: {}, ru: null, sd: null, md: null, clear: false, curT: 450, pk: { inL: 0, inR: 0, outL: 0, outR: 0, rms: 0 } };
 function revSettings(mixOverride) {
-  return { type: S.type | 0, shimmer: !!S.shim_on, lexBlend: S.lexmix, shimmerSemis: S.shift, shimmerAmount: S.shimmer, shimmer2Semis: S.shift2, shimmer2Amount: S.shimmer2, wetHpHz: bandEff(S.hp, S.lp, S.rband)[0], wetLpHz: bandEff(S.hp, S.lp, S.rband)[1], mix: mixOverride === undefined ? S.mix : mixOverride,
+  return { type: S.type | 0, shimmer: !!S.shim_on, lexBlend: S.lexmix, spGain: Math.pow(10, S.splevel / 20), shGain: Math.pow(10, S.shlevel / 20), lxGain: Math.pow(10, S.lxlevel / 20), shimmerSemis: S.shift, shimmerAmount: S.shimmer, shimmer2Semis: S.shift2, shimmer2Amount: S.shimmer2, wetHpHz: bandEff(S.hp, S.lp, S.rband)[0], wetLpHz: bandEff(S.hp, S.lp, S.rband)[1], mix: mixOverride === undefined ? S.mix : mixOverride,
     p: { decay: S.decay, dampHz: S.damp, preDelayMs: S.predelay, size: S.size, modDepth: S.mod, color: S.color, bass: S.bass, xoverHz: S.xover, shape: S.shape, spread: S.spread, diffusion: S.diff, spin: S.spin, wander: S.wander, early: S.early, lexMode: S.lexmode | 0, special: S.rspec }, level: mixOverride === undefined ? Math.pow(10, S.rlevel / 20) : 1 };
 }
 /* how much of the dry stays: every unit that is on takes (1 - its mix); side by side stages average */

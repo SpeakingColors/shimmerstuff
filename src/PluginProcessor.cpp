@@ -50,7 +50,7 @@ const F kFloats[] = {
     { "dvoices", "Delay voices", 1.f, 8.f, 1.f, 0.f }, { "dslope", "Delay slope", -1.f, 1.f, 0.f, 0.f }, { "dwander", "Delay wander", 0.f, 1.f, 0.f, 0.f },
     { "dspin", "Delay spin", 0.f, 1.f, 0.5f, 0.f }, { "ddiff", "Delay diffusion", 0.f, 1.f, 0.f, 0.f },
     // reverb types, delay character, modulation chain and the three Level knobs (dB, 0 = as before)
-    { "rspec", "Reverb special", 0.f, 1.f, 0.5f, 0.f }, { "rlevel", "Reverb level", -12.f, 12.f, 0.f, 0.f }, { "dlevel", "Delay level", -12.f, 12.f, 0.f, 0.f }, { "m_level", "Modulation level", -12.f, 12.f, 0.f, 0.f },
+    { "rspec", "Reverb special", 0.f, 1.f, 0.5f, 0.f }, { "rlevel", "Reverb level", -12.f, 12.f, 0.f, 0.f }, { "splevel", "Space level", -12.f, 12.f, 0.f, 0.f }, { "shlevel", "Shimmer level", -12.f, 12.f, 0.f, 0.f }, { "lxlevel", "Lexicat level", -12.f, 12.f, 0.f, 0.f }, { "dlevel", "Delay level", -12.f, 12.f, 0.f, 0.f }, { "m_level", "Modulation level", -12.f, 12.f, 0.f, 0.f },
     { "dduck", "Delay ducker", 0.f, 1.f, 0.f, 0.f }, { "dthr", "Ducker threshold", 0.f, 1.f, 0.3f, 0.f }, { "dsmear", "Delay smear", 0.f, 1.f, 0.f, 0.f },
     { "dmod", "Delay mod depth", 0.f, 1.f, 0.5f, 0.f }, { "drate", "Delay mod rate", 0.1f, 8.f, 0.8f, 1.f }, { "m_mix", "Modulation mix", 0.f, 1.f, 1.f, 0.f },
 };
@@ -275,6 +275,7 @@ void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>& buf, juce::Mi
     rs.p.decay = get("decay"); rs.p.dampHz = get("damp"); rs.p.preDelayMs = get("predelay"); rs.p.size = get("size"); rs.p.modDepth = get("mod"); rs.p.color = get("color");
     rs.p.bass = get("bass"); rs.p.xoverHz = get("xover"); rs.p.shape = get("shape"); rs.p.spread = get("spread"); rs.p.diffusion = get("diff");
     rs.lexBlend = get("lexmix"); rs.p.lexMode = juce::jlimit(0, 4, (int) get("lexmode")); rs.shimmer = get("shim_on") > .5f;
+    { auto lg = [&](const char* k) { return std::pow(10.f, get(k) / 20.f); }; rs.spGain = lg("splevel"); rs.shGain = lg("shlevel"); rs.lxGain = lg("lxlevel"); }
     rs.p.spin = get("spin"); rs.p.wander = get("wander"); rs.p.early = get("early");
     rs.shimmerSemis = get("shift"); rs.shimmerAmount = get("shimmer"); rs.shimmer2Semis = get("shift2"); rs.shimmer2Amount = get("shimmer2");
     { const float k = std::pow(2.f, get("rband")); rs.wetLpHz = juce::jlimit(20.f, 20000.f, get("lp") * k); rs.wetHpHz = juce::jmin(juce::jlimit(20.f, 20000.f, get("hp") * k), rs.wetLpHz); }

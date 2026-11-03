@@ -39,7 +39,7 @@ static juce::String fmtVal(const juce::String& id, float v, int type = 1)
     if (id == "decay") { const float t = wm::engine::decaySeconds(type, v); return t < 1.f ? juce::String(juce::roundToInt(t * 1000.f)) + " ms" : juce::String(t, t < 10.f ? 2 : 1) + " s"; }
     if (id == "i_hp" || id == "i_lp" || id == "hp" || id == "lp" || id == "damp" || id == "ddamp") return fmtHz(v);
     if (id == "predelay" || id == "dtime" || id == "w_drel") return juce::String(juce::roundToInt(v)) + " ms";
-    if (id == "w_boost" || id == "i_drive" || id == "w_drive" || id == "rlevel" || id == "dlevel" || id == "m_level") return (v > 0.04f ? "+" : "") + juce::String(v, 1) + " dB";
+    if (id == "w_boost" || id == "i_drive" || id == "w_drive" || id == "rlevel" || id == "splevel" || id == "shlevel" || id == "lxlevel" || id == "dlevel" || id == "m_level") return (v > 0.04f ? "+" : "") + juce::String(v, 1) + " dB";
     if (id.endsWith("_speed")) return juce::String(v, 2) + " Hz";
     return juce::String(juce::roundToInt(v * 100.f)) + " %";
 }
@@ -858,13 +858,14 @@ Body::Body(ShimmerstuffProcessor& p)
     dRatio.init(*this, a, "w_dratio", "Ratio", ShimmerstuffProcessor::ratioNames(), "Length of one duck cycle at the host tempo (4/4). 1/4 is one beat.");
     shape.setTooltip("Duck shape: click one. Taller means more ducking at that moment of the cycle.");
     struct K { const char* id; const char* name; Knob::Kind k; };
-    const K rks[25] = { { "decay", "Decay", Knob::Dec }, { "size", "Size", Knob::Size }, { "predelay", "Pre-delay", Knob::Ms }, { "mod", "Modulation", Knob::Pct }, { "color", "Colour", Knob::Plain },
+    const K rks[28] = { { "decay", "Decay", Knob::Dec }, { "size", "Size", Knob::Size }, { "predelay", "Pre-delay", Knob::Ms }, { "mod", "Modulation", Knob::Pct }, { "color", "Colour", Knob::Plain },
         { "shift", "Pitch", Knob::St }, { "shimmer", "Mix", Knob::Pct }, { "shift2", "Pitch 2", Knob::St }, { "shimmer2", "Mix 2", Knob::Pct },
         { "damp", "Damping", Knob::Hz }, { "hp", "Wet HP", Knob::Hz }, { "lp", "Wet LP", Knob::Hz }, { "mix", "Mix", Knob::Pct },
         { "lexmix", "Mix", Knob::Pct }, { "bass", "Bass x", Knob::Size }, { "xover", "Crossover", Knob::Hz }, { "shape", "Shape", Knob::Pct }, { "spread", "Spread", Knob::Pct },
         { "diff", "Diffusion", Knob::Pct }, { "spin", "Spin", Knob::Pct }, { "wander", "Wander", Knob::Pct }, { "early", "Pre-echoes", Knob::Pct },
-        { "rlevel", "Level", Knob::Db }, { "rspec", "Special", Knob::Spec }, { "rband", "Band", Knob::Oct } };
-    const char* rtip[25] = { "Tail length. Drag the yellow dot in the Decay view sideways too.", "Room size. Drag the yellow dot up or down too.", "Gap before the reverb starts. Drag the cyan handle too.", "Slow movement inside the tail, for a lusher sound.",
+        { "rlevel", "Level", Knob::Db }, { "rspec", "Special", Knob::Spec }, { "rband", "Band", Knob::Oct },
+        { "splevel", "Level", Knob::Db }, { "shlevel", "Level", Knob::Db }, { "lxlevel", "Level", Knob::Db } };
+    const char* rtip[28] = { "Tail length. Drag the yellow dot in the Decay view sideways too.", "Room size. Drag the yellow dot up or down too.", "Gap before the reverb starts. Drag the cyan handle too.", "Slow movement inside the tail, for a lusher sound.",
         "Dark to bright tilt of the tail. Velvet only.", "Pitch of the shimmer voice fed back into the reverb (shimmer types).", "How much shifted tail is fed back (shimmer types). Drag the orange handle too.", "Pitch of the second shimmer voice.", "Amount of the second shimmer voice. 0 is off.",
         "Darkens the tail. Drag the blue handle or the line in the Tone view too.", "High-pass on the reverb tail only. Keeps the tail out of the bass.", "Low-pass on the reverb tail only.", "Reverb dry/wet. Drag the pink handle too.",
         "How much Lexicat is mixed with the reverb type. 0 is the type only, 100 % is Lexicat only, in between you hear both. With shimmer on, the shifted tail feeds both.",
@@ -878,11 +879,12 @@ Body::Body(ShimmerstuffProcessor& p)
         "Level of four early reflections that bypass the tail and ignore pre-delay.",
         "Level of the whole reverb (any type, Lexicat and shimmer included). Push it to bring the reverb forward in the mix without touching the dry sound.",
         "A type specific control. Gated: hold time before the cut. Reverse: length of the reverse window. Spring: how much boing. Other types ignore it.",
-        "Moves Wet HP and Wet LP together, in octaves (+1 doubles both). HP and LP never cross." };
-    const juce::Colour rcol[25] = { col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::yellow, col::yellow, col::yellow, col::yellow, col::blue, col::blue, col::blue, col::pink,
-        col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::pink, col::lilac, col::blue };
+        "Moves Wet HP and Wet LP together, in octaves (+1 doubles both). HP and LP never cross.",
+        "Level of the reverb type itself (the Space section), in dB. Shimmer and Lexicat have their own Level.", "Level of the shimmer voices, in dB. Raises or lowers how much shifted tail is fed back, on top of the Mix knobs.", "Level of Lexicat, in dB. Only matters when Lexicat Mix is above 0." };
+    const juce::Colour rcol[28] = { col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::yellow, col::yellow, col::yellow, col::yellow, col::blue, col::blue, col::blue, col::pink,
+        col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::pink, col::lilac, col::blue, col::pink, col::pink, col::pink };
     rk[0].typeFn = rk[23].typeFn = [this] { return (int) proc.get("type"); };
-    for (int i = 0; i < 25; ++i) rk[i].init(*this, a, rks[i].id, rks[i].name, rks[i].k, rcol[i], rtip[i]);
+    for (int i = 0; i < 28; ++i) rk[i].init(*this, a, rks[i].id, rks[i].name, rks[i].k, rcol[i], rtip[i]);
     const K dks[21] = { { "dtime", "Time", Knob::Ms }, { "dfb", "Feedback", Knob::Pct }, { "dshift", "Shift", Knob::St }, { "dshim", "Shimmer", Knob::Pct }, { "ddamp", "Damping", Knob::Hz }, { "dmix", "Mix", Knob::Pct },
         { "dxfb", "Cross fb", Knob::Plain }, { "dwide", "Width", Knob::Pct }, { "dtap2", "2nd voice", Knob::Pct }, { "dratio2", "2nd time", Knob::Size }, { "dvoices", "Voices", Knob::Int },
         { "dslope", "Slope", Knob::Plain }, { "dwander", "Wander", Knob::Pct }, { "dspin", "Spin", Knob::Pct }, { "ddiff", "Diffusion", Knob::Pct },
@@ -1209,12 +1211,12 @@ void Body::layoutTab()
         panels.push_back({ { L, p1, LW, rowH }, 1, "SPACE", "type and size of the room" });
         panels.push_back({ { L, p2, 532, rowH }, 2, "SHIMMER", "pitch shifted copy fed into the tail" });
         panels.push_back({ { L + 540, p2, 532, rowH }, 3, "TONE AND MIX", "what reaches the output" });
-        panels.push_back({ { L, p3, LW, rowH }, 4, "LEXICAT AND LEVEL", "our second reverb engine, plus the level of the whole reverb" });
+        panels.push_back({ { L, p3, LW, rowH }, 4, "LEXICAT", "our second reverb engine" });
         place(revOn, L + LW - 78, p1 + 6, 66, 24);
-        place(rType, L + 12, p1 + 44, 132, 52); knobRow(rk, 5, L + 160, p1 + 32, 100); place(rk[23], L + 160 + 500, p1 + 32, 100, 76);
+        place(rType, L + 12, p1 + 44, 132, 52); knobRow(rk, 5, L + 160, p1 + 32, 100); place(rk[23], L + 160 + 500, p1 + 32, 100, 76); place(rk[25], L + 160 + 600, p1 + 32, 100, 76);
         place(shimTog, L + 532 - 130, p2 + 6, 118, 24);
-        knobRow(rk + 5, 4, L + 16, p2 + 32, 100); { Knob* tk[5] = { &rk[9], &rk[10], &rk[11], &rk[24], &rk[12] }; for (int i = 0; i < 5; ++i) place(*tk[i], L + 540 + 16 + i * 100, p2 + 32, 100, 76); }
-        place(rMode, L + 12, p3 + 44, 132, 52); knobRow(rk + 13, 9, L + 160, p3 + 32, 88); place(rk[22], L + 160 + 9 * 88, p3 + 32, 88, 76);
+        knobRow(rk + 5, 4, L + 16, p2 + 32, 100); place(rk[26], L + 16 + 400, p2 + 32, 100, 76); { Knob* tk[6] = { &rk[9], &rk[10], &rk[11], &rk[24], &rk[12], &rk[22] }; for (int i = 0; i < 6; ++i) place(*tk[i], L + 540 + 4 + i * 87, p2 + 32, 87, 76); }
+        place(rMode, L + 12, p3 + 44, 132, 52); knobRow(rk + 13, 9, L + 160, p3 + 32, 88); place(rk[27], L + 160 + 9 * 88, p3 + 32, 88, 76);
     }
     else if (tab == 1)
     {

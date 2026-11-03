@@ -470,6 +470,7 @@ struct ReverbSettings {
     float shimmer2Semis = 7.0f, shimmer2Amount = 0.0f;   // second shimmer voice (0 = off), own pitch and amount
     float wetHpHz = 20.0f, wetLpHz = 20000.0f;           // filters on the wet signal only (20 / 20000 = off)
     bool shimmer = true;                                 // shimmer feedback on or off, independent of the type
+    float spGain = 1.0f, shGain = 1.0f, lxGain = 1.0f;   // per section levels (linear): the type tail, the shimmer voices, Lexicat
     float lexBlend = 0.0f;                               // 0 = the chosen type only, 1 = Lexicat only, in between = both side by side
     float mix = 0.3f;
     float level = 1.0f;                                  // gain of the wet signal only (linear), brings the reverb forward
@@ -510,8 +511,8 @@ public:
         float fl = inL, fr = inR;
         if (shim) {
             // Loop gain stays below 1 whatever the knob says: amount 0..1 maps to 0..0.4, and the tail is soft limited below.
-            float g = 0.4f * std::min(1.0f, std::max(0.0f, s.shimmerAmount));
-            float g2 = 0.4f * std::min(1.0f, std::max(0.0f, s.shimmer2Amount));
+            float g = 0.4f * std::min(1.0f, std::max(0.0f, s.shimmerAmount)) * s.shGain;
+            float g2 = 0.4f * std::min(1.0f, std::max(0.0f, s.shimmer2Amount)) * s.shGain;
             if (g + g2 > 0.4f) { float k = 0.4f / (g + g2); g *= k; g2 *= k; }   // both voices together never exceed the single-voice loop gain
             // The plate alone is almost at unity loop gain at the longest decays, so shifted feedback pushes the loop past 1
             // (measured with tests/measure.sh section 3, 40 s of loud noise at decay 1.0 and full shimmer: peak 8.1 before this line, 3.6 after; the hall network stays stable).
@@ -549,7 +550,8 @@ public:
                 default: hall_.process(fl, fr, wl, wr, s.p); break;
             }
         }
-        if (bl > 0.001f) lex_.process(fl, fr, xl, xr, s.p);
+        wl *= s.spGain; wr *= s.spGain;
+        if (bl > 0.001f) { lex_.process(fl, fr, xl, xr, s.p); xl *= s.lxGain; xr *= s.lxGain; }
         const float fbl = wl * (1.0f - bl) + xl * bl * (1.0f / LexReverb::kLevel), fbr = wr * (1.0f - bl) + xr * bl * (1.0f / LexReverb::kLevel);   // feedback tap keeps the old loop gain
         wl = wl * (1.0f - bl) + xl * bl; wr = wr * (1.0f - bl) + xr * bl;
         last_[0] = std::tanh(fbl); last_[1] = std::tanh(fbr);   // feedback tap taken before the output filters

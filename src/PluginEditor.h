@@ -223,7 +223,7 @@ private:
     std::vector<float> selSnap[4]; juce::String selLabel[4];
     DecayView decay; ToneView toneRev, toneDel, toneFx, toneMod; ModView modv; EchoView echo; RouteView route; ShapeView shape; LevelMeter meter;
     Combo rType, rMode, lay, dMode, dSrc, dRatio, dType, mType;
-    Knob rk[25], dk[21], ik[5], wk[6], dukn[3], mk[15], mMix, mLevel, limIn, limOut;
+    Knob rk[28], dk[21], ik[5], wk[6], dukn[3], mk[15], mMix, mLevel, limIn, limOut;
     juce::TextButton shimTog { "SHIMMER ON" }, onBtn[5], revOn { "ON" }, delOn { "ON" }, holdTog { "HOLD" }, limTog { "LIMITER" }, modOn { "ON" }, chip[8];
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> aOn[5], aRev, aDel, aShim, aHold, aLim, aModOn, aChip[8];
     void syncEdit();                 // Modulation tab: aim the knobs at the effect chosen in "Edit effect"
