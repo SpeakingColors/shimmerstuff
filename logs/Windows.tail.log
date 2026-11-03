@@ -32,8 +32,8 @@ Call Stack (most recent call first):
 -- Looking for pthread_create in pthread
 -- Looking for pthread_create in pthread - not found
 -- Found Threads: TRUE
--- Configuring done (123.3s)
--- Generating done (0.1s)
+-- Configuring done (136.9s)
+-- Generating done (0.2s)
 CMake Warning (unused-cli):
   Manually-specified variables were not used by the project:
 
@@ -55,7 +55,7 @@ MSBuild version 18.11.1-1.26513.3+940033be3 for .NET Framework
   -- Check for working CXX compiler: C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/cl.exe - skipped
   -- Detecting CXX compile features
   -- Detecting CXX compile features - done
-  -- Configuring done (1.7s)
+  -- Configuring done (1.9s)
   -- Generating done (0.0s)
   -- Build files have been written to: D:/a/shimmerstuff/shimmerstuff/build/vst3_helpers/Shimmerstuff
   MSBuild version 18.11.1-1.26513.3+940033be3 for .NET Framework
@@ -169,15 +169,17 @@ D:\a\shimmerstuff\shimmerstuff\build\_deps\juce-src\modules\juce_gui_basics\juce
   preset_test.cpp
   Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
   Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
+  fx_test.cpp
   juce_audio_plugin_client_AAX.cpp
   juce_audio_plugin_client_AAX_utils.cpp
   juce_audio_plugin_client_ARA.cpp
   juce_audio_plugin_client_LV2.cpp
-  fx_test.cpp
   juce_audio_plugin_client_Standalone.cpp
   juce_audio_plugin_client_Unity.cpp
   juce_audio_plugin_client_VST2.cpp
   juce_audio_plugin_client_VST3.cpp
+  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
+  reverb_test.cpp
 C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244: 'initializing': conversion from '_Ty' to '_Ty2', possible loss of data [D:\a\shimmerstuff\shimmerstuff\build\preset_test.vcxproj]
 C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244:         with [D:\a\shimmerstuff\shimmerstuff\build\preset_test.vcxproj]
 C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231\include\utility(277,54): warning C4244:         [ [D:\a\shimmerstuff\shimmerstuff\build\preset_test.vcxproj]
@@ -201,8 +203,6 @@ C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC\14.51.36231
               see the first reference to 'std::pair<const char *,float>::pair' in 'ssp::reverbPresets'
   
   preset_test.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Release\preset_test.exe
-  Building Custom Rule D:/a/shimmerstuff/shimmerstuff/CMakeLists.txt
-  reverb_test.cpp
   fx_test.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Release\fx_test.exe
   reverb_test.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Release\reverb_test.exe
   Shimmerstuff_Standalone.vcxproj -> D:\a\shimmerstuff\shimmerstuff\build\Shimmerstuff_artefacts\Release\Standalone\shimmerstuff.exe
