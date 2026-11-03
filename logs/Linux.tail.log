@@ -40,12 +40,12 @@ Call Stack (most recent call first):
 -- Performing Test CMAKE_HAVE_LIBC_PTHREAD
 -- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
 -- Found Threads: TRUE
--- Configuring done (58.6s)
+-- Configuring done (94.5s)
 -- Generating done (0.0s)
 -- Build files have been written to: /home/runner/work/shimmerstuff/shimmerstuff/build
 [  1%] Building VST3 manifest helper for Shimmerstuff
-[  4%] Building CXX object CMakeFiles/fx_test.dir/tests/fx_test.cpp.o
 [  4%] Building CXX object _deps/cat_ui-build/CMakeFiles/cat_ui.dir/src/CatLookAndFeel.cpp.o
+[  4%] Building CXX object CMakeFiles/fx_test.dir/tests/fx_test.cpp.o
 [  6%] Building CXX object CMakeFiles/reverb_test.dir/tests/reverb_test.cpp.o
 -- The CXX compiler identification is GNU 15.2.0
 -- Detecting CXX compiler ABI info
@@ -53,20 +53,20 @@ Call Stack (most recent call first):
 -- Check for working CXX compiler: /usr/bin/c++ - skipped
 -- Detecting CXX compile features
 -- Detecting CXX compile features - done
--- Configuring done (0.2s)
+-- Configuring done (0.3s)
 -- Generating done (0.0s)
 -- Build files have been written to: /home/runner/work/shimmerstuff/shimmerstuff/build/vst3_helpers/Shimmerstuff
 [ 50%] Building CXX object CMakeFiles/vst3_helper.dir/home/runner/work/shimmerstuff/shimmerstuff/build/_deps/juce-src/modules/juce_audio_plugin_client/VST3/juce_VST3ManifestHelper.cpp.o
 [100%] Linking CXX executable vst3_helper
 [100%] Built target vst3_helper
 [  6%] Built target Shimmerstuff_vst3_helper
-[  7%] Building CXX object CMakeFiles/preset_test.dir/tests/preset_test.cpp.o
-[  9%] Linking CXX executable preset_test
+[  7%] Building CXX object _deps/cat_ui-build/CMakeFiles/cat_ui.dir/src/CatFrame.cpp.o
+[  9%] Building CXX object CMakeFiles/preset_test.dir/tests/preset_test.cpp.o
 [ 10%] Linking CXX executable reverb_test
-[ 10%] Built target preset_test
-[ 12%] Building CXX object _deps/cat_ui-build/CMakeFiles/cat_ui.dir/src/CatFrame.cpp.o
-[ 14%] Building CXX object _deps/cat_ui-build/CMakeFiles/cat_ui.dir/__/juce-src/modules/juce_gui_basics/juce_gui_basics.cpp.o
-[ 14%] Built target reverb_test
+[ 10%] Built target reverb_test
+[ 12%] Building CXX object _deps/cat_ui-build/CMakeFiles/cat_ui.dir/__/juce-src/modules/juce_gui_basics/juce_gui_basics.cpp.o
+[ 14%] Linking CXX executable preset_test
+[ 14%] Built target preset_test
 [ 15%] Building CXX object _deps/cat_ui-build/CMakeFiles/cat_ui.dir/__/juce-src/modules/juce_gui_basics/juce_gui_basics_2.cpp.o
 [ 17%] Linking CXX executable fx_test
 [ 17%] Built target fx_test
@@ -88,18 +88,18 @@ Call Stack (most recent call first):
 [ 40%] Building CXX object CMakeFiles/Shimmerstuff.dir/_deps/juce-src/modules/juce_gui_extra/juce_gui_extra.cpp.o
 In file included from /home/runner/work/shimmerstuff/shimmerstuff/src/Fx.h:5,
                  from /home/runner/work/shimmerstuff/shimmerstuff/src/PluginProcessor.h:3,
-                 from /home/runner/work/shimmerstuff/shimmerstuff/src/PluginEditor.h:2,
-                 from /home/runner/work/shimmerstuff/shimmerstuff/src/PluginEditor.cpp:1:
+                 from /home/runner/work/shimmerstuff/shimmerstuff/src/PluginProcessor.cpp:1:
 /home/runner/work/shimmerstuff/shimmerstuff/src/Reverb.h: In member function ‘void wm::engine::ReverbUnit::process(float, float, float&, float&, const wm::engine::ReverbSettings&)’:
-/home/runner/work/shimmerstuff/shimmerstuff/src/Reverb.h:532:20: warning: enumeration value ‘Hall’ not handled in switch [-Wswitch-enum]
-  532 |             switch (s.type) {
+/home/runner/work/shimmerstuff/shimmerstuff/src/Reverb.h:533:20: warning: enumeration value ‘Hall’ not handled in switch [-Wswitch-enum]
+  533 |             switch (s.type) {
       |                    ^
 In file included from /home/runner/work/shimmerstuff/shimmerstuff/src/Fx.h:5,
                  from /home/runner/work/shimmerstuff/shimmerstuff/src/PluginProcessor.h:3,
-                 from /home/runner/work/shimmerstuff/shimmerstuff/src/PluginProcessor.cpp:1:
+                 from /home/runner/work/shimmerstuff/shimmerstuff/src/PluginEditor.h:2,
+                 from /home/runner/work/shimmerstuff/shimmerstuff/src/PluginEditor.cpp:1:
 /home/runner/work/shimmerstuff/shimmerstuff/src/Reverb.h: In member function ‘void wm::engine::ReverbUnit::process(float, float, float&, float&, const wm::engine::ReverbSettings&)’:
-/home/runner/work/shimmerstuff/shimmerstuff/src/Reverb.h:532:20: warning: enumeration value ‘Hall’ not handled in switch [-Wswitch-enum]
-  532 |             switch (s.type) {
+/home/runner/work/shimmerstuff/shimmerstuff/src/Reverb.h:533:20: warning: enumeration value ‘Hall’ not handled in switch [-Wswitch-enum]
+  533 |             switch (s.type) {
       |                    ^
 In file included from /home/runner/work/shimmerstuff/shimmerstuff/build/_deps/juce-src/modules/juce_audio_processors_headless/juce_audio_processors_headless.h:145,
                  from /home/runner/work/shimmerstuff/shimmerstuff/build/_deps/juce-src/modules/juce_audio_processors/juce_audio_processors.h:64,
@@ -108,6 +108,9 @@ In file included from /home/runner/work/shimmerstuff/shimmerstuff/build/_deps/ju
 /home/runner/work/shimmerstuff/shimmerstuff/build/_deps/juce-src/modules/juce_audio_processors_headless/processors/juce_AudioProcessor.h:292:18: warning: ‘virtual void juce::AudioProcessor::processBlock(juce::AudioBuffer<double>&, juce::MidiBuffer&)’ was hidden [-Woverloaded-virtual=]
   292 |     virtual void processBlock (AudioBuffer<double>& buffer,
       |                  ^~~~~~~~~~~~
+/home/runner/work/shimmerstuff/shimmerstuff/src/PluginProcessor.h:15:10: note:   by ‘virtual void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&)’
+   15 |     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+      |          ^~~~~~~~~~~~
 In file included from /home/runner/work/shimmerstuff/shimmerstuff/build/_deps/juce-src/modules/juce_audio_processors_headless/juce_audio_processors_headless.h:145,
                  from /home/runner/work/shimmerstuff/shimmerstuff/build/_deps/juce-src/modules/juce_audio_processors/juce_audio_processors.h:64,
                  from /home/runner/work/shimmerstuff/shimmerstuff/src/PluginProcessor.h:2:
@@ -115,17 +118,7 @@ In file included from /home/runner/work/shimmerstuff/shimmerstuff/build/_deps/ju
 /home/runner/work/shimmerstuff/shimmerstuff/build/_deps/juce-src/modules/juce_audio_processors_headless/processors/juce_AudioProcessor.h:292:18: warning: ‘virtual void juce::AudioProcessor::processBlock(juce::AudioBuffer<double>&, juce::MidiBuffer&)’ was hidden [-Woverloaded-virtual=]
   292 |     virtual void processBlock (AudioBuffer<double>& buffer,
       |                  ^~~~~~~~~~~~
-/home/runner/work/shimmerstuff/shimmerstuff/src/PluginProcessor.h:15:10: note:   by ‘virtual void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&)’
-   15 |     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
-      |          ^~~~~~~~~~~~
-/home/runner/work/shimmerstuff/shimmerstuff/src/PluginProcessor.h:15:10: note:   by ‘virtual void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&)’
-   15 |     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
-      |          ^~~~~~~~~~~~
 In file included from /home/runner/work/shimmerstuff/shimmerstuff/src/PluginProcessor.cpp:2:
-/home/runner/work/shimmerstuff/shimmerstuff/src/PluginEditor.h: In constructor ‘ss::RouteView::RouteView(ShimmerstuffProcessor&, std::function<void(int)>)’:
-/home/runner/work/shimmerstuff/shimmerstuff/src/PluginEditor.h:151:66: warning: declaration of ‘openTab’ shadows a member of ‘ss::RouteView’ [-Wshadow]
-  151 |     RouteView(ShimmerstuffProcessor& p, std::function<void(int)> openTab) : proc(p), openTab(std::move(openTab)) {}
-      |                                         ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
 /home/runner/work/shimmerstuff/shimmerstuff/src/PluginEditor.h: In constructor ‘ss::RouteView::RouteView(ShimmerstuffProcessor&, std::function<void(int)>)’:
 /home/runner/work/shimmerstuff/shimmerstuff/src/PluginEditor.h:151:66: warning: declaration of ‘openTab’ shadows a member of ‘ss::RouteView’ [-Wshadow]
   151 |     RouteView(ShimmerstuffProcessor& p, std::function<void(int)> openTab) : proc(p), openTab(std::move(openTab)) {}
@@ -133,6 +126,13 @@ In file included from /home/runner/work/shimmerstuff/shimmerstuff/src/PluginProc
 /home/runner/work/shimmerstuff/shimmerstuff/src/PluginEditor.h:166:59: note: shadowed declaration is here
   166 |     ShimmerstuffProcessor& proc; std::function<void(int)> openTab;
       |                                                           ^~~~~~~
+/home/runner/work/shimmerstuff/shimmerstuff/src/PluginProcessor.h:15:10: note:   by ‘virtual void ShimmerstuffProcessor::processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&)’
+   15 |     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+      |          ^~~~~~~~~~~~
+/home/runner/work/shimmerstuff/shimmerstuff/src/PluginEditor.h: In constructor ‘ss::RouteView::RouteView(ShimmerstuffProcessor&, std::function<void(int)>)’:
+/home/runner/work/shimmerstuff/shimmerstuff/src/PluginEditor.h:151:66: warning: declaration of ‘openTab’ shadows a member of ‘ss::RouteView’ [-Wshadow]
+  151 |     RouteView(ShimmerstuffProcessor& p, std::function<void(int)> openTab) : proc(p), openTab(std::move(openTab)) {}
+      |                                         ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
 /home/runner/work/shimmerstuff/shimmerstuff/src/PluginEditor.h:166:59: note: shadowed declaration is here
   166 |     ShimmerstuffProcessor& proc; std::function<void(int)> openTab;
       |                                                           ^~~~~~~
@@ -200,14 +200,14 @@ In file included from /home/runner/work/shimmerstuff/shimmerstuff/build/_deps/ju
 [ 76%] Building CXX object CMakeFiles/Shimmerstuff_Standalone.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_AAX_utils.cpp.o
 [ 78%] Building CXX object CMakeFiles/Shimmerstuff_VST3.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_AAX_utils.cpp.o
 [ 81%] Building CXX object CMakeFiles/Shimmerstuff_VST3.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_ARA.cpp.o
-[ 81%] Building CXX object CMakeFiles/Shimmerstuff_Standalone.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_ARA.cpp.o
-[ 84%] Building CXX object CMakeFiles/Shimmerstuff_Standalone.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_LV2.cpp.o
-[ 84%] Building CXX object CMakeFiles/Shimmerstuff_VST3.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_LV2.cpp.o
-[ 87%] Building CXX object CMakeFiles/Shimmerstuff_VST3.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_Standalone.cpp.o
+[ 81%] Building CXX object CMakeFiles/Shimmerstuff_VST3.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_LV2.cpp.o
+[ 82%] Building CXX object CMakeFiles/Shimmerstuff_VST3.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_Standalone.cpp.o
+[ 84%] Building CXX object CMakeFiles/Shimmerstuff_Standalone.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_ARA.cpp.o
+[ 85%] Building CXX object CMakeFiles/Shimmerstuff_Standalone.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_LV2.cpp.o
 [ 87%] Building CXX object CMakeFiles/Shimmerstuff_VST3.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_Unity.cpp.o
 [ 89%] Building CXX object CMakeFiles/Shimmerstuff_Standalone.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_Standalone.cpp.o
 [ 90%] Building CXX object CMakeFiles/Shimmerstuff_VST3.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST2.cpp.o
-[ 92%] Building CXX object CMakeFiles/Shimmerstuff_Standalone.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_Unity.cpp.o
+[ 93%] Building CXX object CMakeFiles/Shimmerstuff_Standalone.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_Unity.cpp.o
 [ 93%] Building CXX object CMakeFiles/Shimmerstuff_VST3.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST3.cpp.o
 [ 95%] Building CXX object CMakeFiles/Shimmerstuff_Standalone.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST2.cpp.o
 [ 96%] Building CXX object CMakeFiles/Shimmerstuff_Standalone.dir/_deps/juce-src/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST3.cpp.o
