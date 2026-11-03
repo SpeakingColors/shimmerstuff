@@ -45,6 +45,12 @@ int main() {
             for (int i = 0; i < 96000; ++i) { const float x = 0.5f * std::sin(0.03f * float(i)) + 0.2f * std::sin(0.31f * float(i)); m.process(x, x * 0.8f, p); fin = fin && std::isfinite(m.oL) && std::isfinite(m.oR); pk = std::max(pk, (double)std::max(std::fabs(m.oL), std::fabs(m.oR))); if (i > 48000) { e += m.oL * m.oL; d += (m.oL - x) * (m.oL - x); } }
             CHECK(fin && pk < 3.0 && e > 1.0 && d > 1.0); std::printf("  %s: peak %.2f, differs from dry %.0f %%\n", nm[t], pk, 100.0 * d / e);
         }
+        // supersaw detune: 7 voices, stable, level close to the dry, wider than the mono input
+        { ModFx m; m.prepare(48000); ModParams p; p.type = 7; p.voices = 7; p.shift = 30; p.spread = 0.9f; p.preDelayMs = 0.f; double ei = 0, eo = 0, sl = 0, sr = 0, sx = 0; bool fin = true;
+          for (int i = 0; i < 96000; ++i) { const float x = 0.5f * std::sin(0.03f * float(i)) + 0.2f * std::sin(0.31f * float(i)); m.process(x, x, p); fin = fin && std::isfinite(m.oL) && std::isfinite(m.oR);
+            if (i > 8000) { ei += double(x) * x; eo += 0.5 * (double(m.oL) * m.oL + double(m.oR) * m.oR); sl += double(m.oL) * m.oL; sr += double(m.oR) * m.oR; sx += double(m.oL) * m.oR; } }
+          const double lvl = std::sqrt(eo / ei), corr = sx / std::sqrt(sl * sr + 1e-30); CHECK(fin && lvl > 0.5 && lvl < 1.3 && corr < 0.995);
+          std::printf("  supersaw detune 7 voices: level vs dry %.2f, L/R correlation %.3f\n", lvl, corr); }
         { const Graph g = parseGraph("ifx>rev>del>mod>wfx"); CHECK(g.stages == 5 && graphString(g) == "ifx>rev>del>mod>wfx"); const Graph g2 = parseGraph("ifx>rev>del>wfx"); CHECK(graphString(g2) == "ifx>rev>del>wfx>mod"); }   // old saves get the box at the end
         { Engine e; e.prepare(48000); e.revOn = e.delOn = e.ifxOn = e.wfxOn = false; e.modOn = true; e.modUse[0] = false; e.modUse[3] = true; e.mps[3].type = 3; e.mps[3].depth = 1.0f; e.mps[3].speed = 2.0f; const Graph g = parseGraph("ifx>rev>del>mod>wfx"); double lo = 1, hi = 0; float ol, orr;
           for (int i = 0; i < 96000; ++i) { const float x = 0.5f * std::sin(0.05f * float(i)); e.tick(g, x, x, x, x, ol, orr); if (i > 2000) { const double a = std::fabs(ol); lo = std::min(lo, a); hi = std::max(hi, a); } }

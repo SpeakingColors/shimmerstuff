@@ -57,16 +57,16 @@ const F kFloats[] = {
 // Per effect settings of the modulation chain: ids m0_speed ... m7_shift. Order of the effects: Chorus, Flanger, Phaser, Tremolo, Pan, Rotary, Vibrato, Detune.
 struct MF { const char* key; const char* name; float lo, hi, mid; int kind; };   // kind 0 float, 1 int
 const MF kModF[ShimmerstuffProcessor::kModKeys] = {
-    { "speed", "speed", 0.05f, 20.f, 1.5f, 0 }, { "depth", "depth", 0.f, 1.f, 0.f, 0 }, { "voices", "voices", 1.f, 4.f, 0.f, 1 }, { "stages", "stages", 0.f, 2.f, 0.f, 1 },
+    { "speed", "speed", 0.05f, 20.f, 1.5f, 0 }, { "depth", "depth", 0.f, 1.f, 0.f, 0 }, { "voices", "voices", 1.f, 7.f, 0.f, 1 }, { "stages", "stages", 0.f, 2.f, 0.f, 1 },
     { "regen", "regen", -0.9f, 0.9f, 0.f, 0 }, { "pre", "pre-delay", 0.f, 20.f, 0.f, 0 }, { "diff", "diffusion", 0.f, 1.f, 0.f, 0 }, { "wave", "waveform", 0.f, 2.f, 0.f, 1 },
     { "phase", "phase", 0.f, 1.f, 0.f, 0 }, { "spread", "spread", 0.f, 1.f, 0.f, 0 }, { "drive", "drive", 0.f, 1.f, 0.f, 0 }, { "min", "min speed", 0.2f, 4.f, 0.f, 0 },
-    { "max", "max speed", 2.f, 12.f, 0.f, 0 }, { "dop", "doppler", 0.f, 1.f, 0.f, 0 }, { "shift", "detune", 0.f, 50.f, 0.f, 0 } };
+    { "max", "max speed", 2.f, 12.f, 0.f, 0 }, { "dop", "doppler", 0.f, 1.f, 0.f, 0 }, { "shift", "detune", 0.f, 100.f, 0.f, 0 } };
 const float kModBase[ShimmerstuffProcessor::kModKeys] = { 0.8f, 0.5f, 2.f, 1.f, 0.f, 3.f, 0.f, 0.f, 0.5f, 0.7f, 0.2f, 0.8f, 6.5f, 0.5f, 12.f };
 float modDefault(int t, int k)
 {
     struct O { int t, k; float v; };
     static const O o[] = { { 1, 0, 0.25f }, { 1, 1, 0.8f }, { 1, 4, 0.5f }, { 1, 5, 1.f }, { 2, 0, 0.3f }, { 2, 1, 0.7f }, { 2, 4, 0.4f }, { 3, 0, 4.f }, { 3, 1, 0.6f }, { 4, 0, 0.5f }, { 4, 1, 1.f },
-        { 6, 0, 5.f }, { 6, 1, 0.4f }, { 7, 5, 12.f } };
+        { 6, 0, 5.f }, { 6, 1, 0.4f }, { 7, 5, 12.f }, { 7, 2, 5.f }, { 7, 14, 18.f } };
     for (const auto& e : o) if (e.t == t && e.k == k) return e.v;
     return kModBase[k];
 }

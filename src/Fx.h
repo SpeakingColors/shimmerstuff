@@ -142,7 +142,7 @@ struct ModParams {
     int type = 0;            // 0 Chorus, 1 Flanger, 2 Phaser, 3 Tremolo, 4 Pan, 5 Rotary, 6 Vibrato, 7 Detune
     float speed = 0.8f;      // Hz (Rotary: horn speed, kept between Min and Max speed)
     float depth = 0.5f;      // 0..1
-    int voices = 2;          // Chorus: 1..4
+    int voices = 2;          // Chorus and Detune: 1..7
     float regen = 0.0f;      // -0.9..0.9, Chorus and Flanger, Phaser: feedback
     float preDelayMs = 3.0f; // Flanger offset, Chorus base time add, Detune delay
     float diffusion = 0.0f;  // 0..1 Chorus: time smoothing
@@ -164,12 +164,14 @@ public:
         sr_ = sr;
         for (int c = 0; c < 2; ++c) {
             dl_[c].prepare(int(0.08f * sr)); for (int k = 0; k < 2; ++k) { dif_[c][k].prepare(int((4.1f + 2.9f * k) * 0.001f * sr)); } hornDl_[c].prepare(int(0.01f * sr)); rotDl_[c].prepare(int(0.01f * sr));
-            ps_[c][0].prepare(sr, 45.0f); ps_[c][1].prepare(sr, 45.0f);
+            
         }
+        for (auto& d : det_) d.prepare(sr, 45.0f);
         reset();
     }
     void reset() {
-        for (int c = 0; c < 2; ++c) { dl_[c].clear(); for (auto& a : dif_[c]) a.clear(); hornDl_[c].clear(); rotDl_[c].clear(); ps_[c][0].reset(); ps_[c][1].reset(); fb_[c] = 0; lo_[c] = 0; for (int k = 0; k < 12; ++k) { ax_[c][k] = 0; } }
+        for (auto& d : det_) d.reset();
+        for (int c = 0; c < 2; ++c) { dl_[c].clear(); for (auto& a : dif_[c]) a.clear(); hornDl_[c].clear(); rotDl_[c].clear(); fb_[c] = 0; lo_[c] = 0; for (int k = 0; k < 12; ++k) { ax_[c][k] = 0; } }
         ph_ = 0; hornPh_ = rotPh_ = 0; hornHz_ = rotHz_ = 0.8f;
     }
     void process(float l, float r, const ModParams& p) {
@@ -179,7 +181,7 @@ public:
         const float depth = std::min(1.0f, std::max(0.0f, p.depth));
         switch (p.type) {
             case 0: {   // Chorus: up to 4 voices around a 8 ms + offset base, spread in phase
-                const int nv = std::max(1, std::min(4, p.voices));
+                const int nv = std::max(1, std::min(7, p.voices));
                 for (int c = 0; c < 2; ++c) {
                     float sum = 0;
                     for (int k = 0; k < nv; ++k) {
@@ -242,14 +244,20 @@ public:
                     o[c] = dl_[c].read(std::max(2.0f, (3.0f + depth * 2.5f * (0.5f + 0.5f * lf)) * 0.001f * sr_));
                 }
                 break; }
-            default: {   // Detune: a copy a few cents sharp on the left and flat on the right, after a short delay
-                const float cents = std::min(50.0f, std::max(0.0f, p.shift)), up = std::pow(2.0f, cents / 1200.0f), dn = 1.0f / up;
-                for (int c = 0; c < 2; ++c) {
-                    dl_[c].push(in[c]);
-                    const float x = p.preDelayMs > 0.5f ? dl_[c].read(p.preDelayMs * 0.001f * sr_) : in[c];
-                    const float sh = ps_[c][0].tick(x, c ? dn : up);
-                    o[c] = 0.5f * (x + sh) * 1.2f;
+            default: {   // Detune, supersaw style: up to 7 voices spread evenly over +-Shift cents (the middle one stays in tune when the count is odd),
+                         // panned across the stereo field by Spread, added to the dry signal
+                const int nv = std::max(1, std::min(7, p.voices));
+                const float cents = std::min(100.0f, std::max(0.0f, p.shift)), sp = std::min(1.0f, std::max(0.0f, p.spread));
+                float x[2];
+                for (int c = 0; c < 2; ++c) { dl_[c].push(in[c]); x[c] = p.preDelayMs > 0.5f ? dl_[c].read(p.preDelayMs * 0.001f * sr_) : in[c]; }
+                const float m = 0.5f * (x[0] + x[1]), k = 1.0f / std::sqrt(float(nv));
+                float accL = 0, accR = 0;
+                for (int v = 0; v < nv; ++v) {
+                    const float t = nv > 1 ? 2.0f * float(v) / float(nv - 1) - 1.0f : 0.0f;
+                    const float s = det_[v].tick(m, std::pow(2.0f, cents * t / 1200.0f)), ang = (sp * t + 1.0f) * 0.78539816f;
+                    accL += std::cos(ang) * s; accR += std::sin(ang) * s;
                 }
+                o[0] = 0.6f * x[0] + 0.85f * k * accL; o[1] = 0.6f * x[1] + 0.85f * k * accR;
                 break; }
         }
         oL = o[0]; oR = o[1];
@@ -263,7 +271,7 @@ private:
         return wf == 2 ? std::tanh(4.0f * s) / std::tanh(4.0f) : s;
     }
     float sr_ = 48000, ph_ = 0, hornPh_ = 0, rotPh_ = 0, hornHz_ = 0.8f, rotHz_ = 0.8f, fb_[2] = {}, lo_[2] = {}, ax_[2][12] = {};
-    wm::engine::DelayLine dl_[2], hornDl_[2], rotDl_[2]; wm::engine::Allpass dif_[2][2]; wm::engine::PitchShifter ps_[2][2];
+    wm::engine::DelayLine dl_[2], hornDl_[2], rotDl_[2]; wm::engine::Allpass dif_[2][2]; wm::engine::PitchShifter det_[7];
 };
 
 // ---------------- routing graph. "ifx>rev|del>wfx": stages left to right, names inside a stage run side by side.

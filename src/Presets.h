@@ -97,8 +97,10 @@ inline const std::vector<Pre>& modPresets()
         modPre("Rotary Slow", 5, { { kSpeed, .8f }, { kDrive, .25f } }),
         modPre("Rotary Fast", 5, { { kSpeed, 6.5f }, { kDrive, .3f }, { kDop, .6f } }),
         modPre("Gentle Vibrato", 6, { { kSpeed, 5 }, { kDepth, .4f } }),
-        modPre("Detune Thickener", 7, { { kShift, 12 }, { kPre, 12 } }),
-        modPre("Detune Wide", 7, { { kShift, 25 }, { kPre, 18 } }),
+        modPre("Detune Thickener", 7, { { kVoices, 2 }, { kShift, 12 }, { kPre, 12 } }),
+        modPre("Detune Wide", 7, { { kVoices, 2 }, { kShift, 25 }, { kPre, 18 } }),
+        modPre("Supersaw Detune", 7, { { kVoices, 7 }, { kShift, 30 }, { kSpread, .9f }, { kPre, 0 } }),
+        modPre("Supersaw Subtle", 7, { { kVoices, 5 }, { kShift, 14 }, { kSpread, .6f }, { kPre, 0 } }),
     };
     return p;
 }

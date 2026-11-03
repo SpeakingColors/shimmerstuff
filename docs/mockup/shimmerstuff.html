@@ -161,6 +161,8 @@ button[aria-pressed="true"] { background:#241238; border-color:var(--cL); color:
 .g3 .gh small { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .g3 .fld { align-self:center; }
 .g3.lex .kw { width:72px; }
+.g3.mod2 .kw { width:70px; }
+.g3.mod2 .fld select { min-width:90px; }
 .g3.lex .fld select { min-width:96px; }
 .g3 .fld select { min-width:120px; }
 .rd { font-family:var(--f-num); font-size:12px; color:var(--cAcc); letter-spacing:0; text-transform:none; }
@@ -745,19 +747,20 @@ RevWet.prototype.process = function (l, r, special) {
 };
 /* Modulation effects: chorus, flanger, phaser, tremolo, pan, rotary, vibrato, detune. Mirrors ModFx in Fx.h. */
 function mlfo(ph, wf) { ph -= Math.floor(ph); if (wf === 1) return ph < 0.5 ? 4 * ph - 1 : 3 - 4 * ph; var s = Math.sin(TWO_PI * ph); return wf === 2 ? Math.tanh(4 * s) / Math.tanh(4) : s; }
-function ModFx() { this.sr = 48000; this.dl = [new DL(), new DL()]; this.dif = [[new AP(), new AP()], [new AP(), new AP()]]; this.hornDl = new DL(); this.rotDl = new DL(); this.ps = [new PS(), new PS()]; this.fb = [0, 0]; this.lo = 0; this.ax = [new Float32Array(12), new Float32Array(12)]; this.ph = 0; this.hornPh = 0; this.rotPh = 0; this.hornHz = 0.8; this.rotHz = 0.8; this.oL = 0; this.oR = 0; }
+function ModFx() { this.sr = 48000; this.dl = [new DL(), new DL()]; this.dif = [[new AP(), new AP()], [new AP(), new AP()]]; this.hornDl = new DL(); this.rotDl = new DL(); this.det = []; for (var q = 0; q < 7; q++) this.det.push(new PS()); this.fb = [0, 0]; this.lo = 0; this.ax = [new Float32Array(12), new Float32Array(12)]; this.ph = 0; this.hornPh = 0; this.rotPh = 0; this.hornHz = 0.8; this.rotHz = 0.8; this.oL = 0; this.oR = 0; }
 ModFx.prototype.prepare = function (sr) {
-  this.sr = sr; for (var c = 0; c < 2; c++) { this.dl[c].prepare(Math.floor(0.08 * sr)); for (var k = 0; k < 2; k++) this.dif[c][k].prepare(Math.floor((4.1 + 2.9 * k) * 0.001 * sr), 0); this.ps[c].prepare(sr, 45); }
+  this.sr = sr; for (var c = 0; c < 2; c++) { this.dl[c].prepare(Math.floor(0.08 * sr)); for (var k = 0; k < 2; k++) this.dif[c][k].prepare(Math.floor((4.1 + 2.9 * k) * 0.001 * sr), 0); }
+  for (c = 0; c < 7; c++) this.det[c].prepare(sr, 45);
   this.hornDl.prepare(Math.floor(0.01 * sr)); this.rotDl.prepare(Math.floor(0.01 * sr)); this.reset();
 };
-ModFx.prototype.reset = function () { for (var c = 0; c < 2; c++) { this.dl[c].clear(); this.dif[c][0].clear(); this.dif[c][1].clear(); this.ps[c].reset(); this.fb[c] = 0; this.ax[c].fill(0); } this.hornDl.clear(); this.rotDl.clear(); this.lo = 0; this.ph = this.hornPh = this.rotPh = 0; this.hornHz = this.rotHz = 0.8; };
+ModFx.prototype.reset = function () { for (var c = 0; c < 2; c++) { this.dl[c].clear(); this.dif[c][0].clear(); this.dif[c][1].clear(); this.fb[c] = 0; this.ax[c].fill(0); } for (var q = 0; q < 7; q++) this.det[q].reset(); this.hornDl.clear(); this.rotDl.clear(); this.lo = 0; this.ph = this.hornPh = this.rotPh = 0; this.hornHz = this.rotHz = 0.8; };
 ModFx.prototype.process = function (l, r, p) {
   var sr = this.sr, inp = [l, r], o = [l, r], c, k, wf = p.waveform | 0;
   this.ph += p.speed / sr; this.ph -= Math.floor(this.ph);
   var off = 0.5 * c01(p.phase), depth = c01(p.depth), ph = this.ph, rg = Math.max(-0.9, Math.min(0.9, p.regen || 0));
   switch (p.type | 0) {
     case 0: {
-      var nv = Math.max(1, Math.min(4, p.voices | 0));
+      var nv = Math.max(1, Math.min(7, p.voices | 0));
       for (c = 0; c < 2; c++) {
         var sum = 0;
         for (k = 0; k < nv; k++) {
@@ -800,8 +803,11 @@ ModFx.prototype.process = function (l, r, p) {
       for (c = 0; c < 2; c++) { var lf6 = mlfo(ph + c * off, wf); this.dl[c].push(inp[c]); o[c] = this.dl[c].read(Math.max(2, (3 + depth * 2.5 * (0.5 + 0.5 * lf6)) * 0.001 * sr)); }
       break;
     default: {
-      var cents = Math.min(50, Math.max(0, p.shift)), up = Math.pow(2, cents / 1200), dn = 1 / up;
-      for (c = 0; c < 2; c++) { this.dl[c].push(inp[c]); var xx = p.preDelayMs > 0.5 ? this.dl[c].read(p.preDelayMs * 0.001 * sr) : inp[c], sh = this.ps[c].tick(xx, c ? dn : up); o[c] = 0.5 * (xx + sh) * 1.2; }
+      var nvd = Math.max(1, Math.min(7, p.voices | 0)), cents = Math.min(100, Math.max(0, p.shift)), spd = c01(p.spread), xd = [0, 0], kd = 1 / Math.sqrt(nvd), accL = 0, accR = 0, v, td, sh, ang;
+      for (c = 0; c < 2; c++) { this.dl[c].push(inp[c]); xd[c] = p.preDelayMs > 0.5 ? this.dl[c].read(p.preDelayMs * 0.001 * sr) : inp[c]; }
+      var md = 0.5 * (xd[0] + xd[1]);
+      for (v = 0; v < nvd; v++) { td = nvd > 1 ? 2 * v / (nvd - 1) - 1 : 0; sh = this.det[v].tick(md, Math.pow(2, cents * td / 1200)); ang = (spd * td + 1) * 0.78539816; accL += Math.cos(ang) * sh; accR += Math.sin(ang) * sh; }
+      o[0] = 0.6 * xd[0] + 0.85 * kd * accL; o[1] = 0.6 * xd[1] + 0.85 * kd * accR;
     }
   }
   this.oL = o[0]; this.oR = o[1];
@@ -974,7 +980,7 @@ def("shift", 12); def("shimmer", 0.5); def("shift2", 7); def("shimmer2", 0); def
 def("graph", "ifx>rev|del|mod>wfx");
 /* modulation: every effect keeps its own settings (m0_speed ... m7_shift) and its own on switch (mo0 ... mo7). The knobs on the tab edit the effect chosen in "Edit". */
 var MKEYS = ["speed", "depth", "voices", "stages", "regen", "pre", "diff", "wave", "phase", "spread", "drive", "min", "max", "dop", "shift"];
-var MDEF = [{ speed: 0.8, depth: 0.5, regen: 0 }, { speed: 0.25, depth: 0.8, regen: 0.5, pre: 1 }, { speed: 0.3, depth: 0.7, regen: 0.4 }, { speed: 4, depth: 0.6 }, { speed: 0.5, depth: 1 }, { speed: 0.8, depth: 0.5 }, { speed: 5, depth: 0.4 }, { speed: 0.8, shift: 12, pre: 12 }];
+var MDEF = [{ speed: 0.8, depth: 0.5, regen: 0 }, { speed: 0.25, depth: 0.8, regen: 0.5, pre: 1 }, { speed: 0.3, depth: 0.7, regen: 0.4 }, { speed: 4, depth: 0.6 }, { speed: 0.5, depth: 1 }, { speed: 0.8, depth: 0.5 }, { speed: 5, depth: 0.4 }, { speed: 0.8, shift: 18, pre: 0, voices: 5 }];
 var MBASE = { speed: 0.8, depth: 0.5, voices: 2, stages: 1, regen: 0, pre: 3, diff: 0, wave: 0, phase: 0.5, spread: 0.7, drive: 0.2, min: 0.8, max: 6.5, dop: 0.5, shift: 12 };
 function mdef(t, k) { var d = MDEF[t]; return d && k in d ? d[k] : MBASE[k]; }
 for (var mt0 = 0; mt0 < 8; mt0++) { MKEYS.forEach(function (k) { def("m" + mt0 + "_" + k, mdef(mt0, k)); }); def("mo" + mt0, mt0 === 0); } def("rev_on", true); def("del_on", false); def("ifx_on", true); def("wfx_on", true); def("i_hp", 20); def("i_lp", 20000); def("i_band", 0); def("i_drive", 6); def("i_mix", 0); def("w_drive", 8); def("w_smix", 0); def("w_depth", 0.6); def("w_qmix", 0); def("w_duck", 0); def("w_drel", 250); def("w_dmode", "follow"); def("w_dsrc", "input"); def("w_dshape", 0); def("w_drate", 2); def("w_dratio", 1); def("w_bpm", 140); def("w_width", 1); def("w_boost", 0); def("w_lim", false);
@@ -1136,7 +1142,7 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
   KW.dthr = mkKnob(d5, { id: "dthr", label: "Threshold", min: 0, max: 1, step: 0.01, def: 0.3, color: COL.pink, fmt: fmtPct, tip: "How loud the input must be before the ducker dips. Only matters with Ducker above 0." });
   addUI("dtype", dimGroups);
   var M_ = $("#fxM");
-  var m1 = grp(M_, 1, "Effect", "type, speed, depth and mix", "wide"), m2 = grp(M_, 2, "Chorus, flanger, phaser, detune", "voices, stages, feedback, offset, smoothing and detune", "span2"), m3 = grp(M_, 3, "Active effects", "any mix of them"), m4 = grp(M_, 4, "Rotary speaker", "horn and rotor, used by the Rotary type", "wide");
+  var m1 = grp(M_, 1, "Effect", "type, speed, depth and mix", "wide"), m2 = grp(M_, 2, "Chorus, flanger, phaser, detune", "voices, stages, feedback, offset, smoothing, spread and detune", "span2 mod2"), m3 = grp(M_, 3, "Active effects", "any mix of them"), m4 = grp(M_, 4, "Rotary speaker", "horn and rotor, used by the Rotary type", "wide");
   var onB = document.createElement("button"); onB.className = "pwr"; onB.textContent = "\u23FB On"; m1.appendChild(onB);
   function syncOn() { onB.setAttribute("aria-pressed", String(!!S["mo" + (S.m_type | 0)])); }
   onB.addEventListener("click", function () { var t = S.m_type | 0; setParam("mo" + t, !S["mo" + t], true); });
@@ -1148,19 +1154,19 @@ function loadPage() { inLoad = true; var t = S.m_type | 0; MKEYS.forEach(functio
   KW.m_phase = mkKnob(m1, { id: "m_phase", label: "Phase", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.pink, fmt: fmtPct, tip: "Left and right move together (0) or opposite each other (100 %). Wider is more stereo." });
   KW.m_mix = mkKnob(m1, { id: "m_mix", label: "Mix", min: 0, max: 1, step: 0.01, def: 1, color: COL.pink, fmt: fmtPct, tip: "Dry/wet. Chorus, flanger, phaser and detune already contain the dry sound, so leave this at 100 % for the normal sound. Tremolo, pan, rotary and vibrato are the whole effect: lower values blend the dry back in." });
   mkKnob(m1, { id: "m_level", label: "Level", min: -12, max: 12, step: 0.1, def: 0, mid: 0, color: COL.pink, fmt: fmtDb, tip: "Level of the modulation effect only, in dB, after all the active effects. 0 dB leaves it as it was." });
-  KW.m_voices = mkKnob(m2, { id: "m_voices", label: "Voices", min: 1, max: 4, step: 1, def: 2, color: COL.pink, fmt: function (v) { return String(Math.round(v)); }, tip: "Chorus only: number of voices, each with its own offset in the cycle." });
+  KW.m_voices = mkKnob(m2, { id: "m_voices", label: "Voices", min: 1, max: 7, step: 1, def: 2, color: COL.pink, fmt: function (v) { return String(Math.round(v)); }, tip: "Chorus: number of voices, each with its own offset in the cycle. Detune: number of detuned copies (supersaw style), up to 7." });
   KW.m_stages = mkSel(m2, "m_stages", "Stages", [[0, "4"], [1, "8"], [2, "12"]], "Phaser only: more stages give more notches and a deeper, richer sweep.", 1);
   KW.m_regen = mkKnob(m2, { id: "m_regen", label: "Regen", min: -0.9, max: 0.9, step: 0.01, def: 0, mid: 0, color: COL.pink, fmt: function (v) { return (v > 0 ? "+" : "") + Math.round(v * 100); }, tip: "Feedback for chorus, flanger and phaser. Higher gives a stronger, more metallic ring; negative flips the sign for a hollow sound." });
   KW.m_pre = mkKnob(m2, { id: "m_pre", label: "Pre-delay", min: 0, max: 20, step: 0.1, def: 3, color: COL.pink, fmt: function (v) { return v.toFixed(1) + " ms"; }, tip: "Flanger: the base delay of the sweep. Chorus: extra base time. Detune: delay before the shifted copy." });
   KW.m_diff = mkKnob(m2, { id: "m_diff", label: "Diffusion", min: 0, max: 1, step: 0.01, def: 0, color: COL.pink, fmt: fmtPct, tip: "Chorus only: smooths the voices so they blur together." });
   var MN_ = ["Chorus", "Flanger", "Phaser", "Tremolo", "Pan", "Rotary", "Vibrato", "Detune"];
   MN_.forEach(function (nm, t) { var b = mkTog(m3, "mo" + t, nm, "Switches " + nm + " on or off. Switching it on also opens its settings. The effects run in this order: Chorus, Flanger, Phaser, Tremolo, Pan, Rotary, Vibrato, Detune.", t === 0); b.addEventListener("click", function () { if (S["mo" + t]) setParam("m_type", t, true); }); });
-  KW.m_shift = mkKnob(m2, { id: "m_shift", label: "Shift", min: 0, max: 50, step: 0.5, def: 12, color: COL.acc, fmt: function (v) { return v.toFixed(1) + " ct"; }, tip: "Detune only: the left copy goes this many cents sharp and the right copy flat. 100 cents is one semitone." });
+  KW.m_shift = mkKnob(m2, { id: "m_shift", label: "Shift", min: 0, max: 100, step: 0.5, def: 18, color: COL.acc, fmt: function (v) { return v.toFixed(1) + " ct"; }, tip: "Detune only: how far apart the outer voices are, in cents (the voices fan out evenly from -Shift to +Shift, the middle one stays in tune). 100 cents is one semitone." });
+  KW.m_spread = mkKnob(m2, { id: "m_spread", label: "Spread", min: 0, max: 1, step: 0.01, def: 0.7, color: COL.acc, fmt: fmtPct, tip: "Detune: how widely the voices are panned across the stereo field (0 is all in the middle). Rotary: how far the two microphones are apart." });
   KW.m_drive = mkKnob(m4, { id: "m_drive", label: "Drive", min: 0, max: 1, step: 0.01, def: 0.2, color: COL.acc, fmt: fmtPct, tip: "Rotary only: pre-amp drive, the warm grit of a tube cabinet." });
   KW.m_min = mkKnob(m4, { id: "m_min", label: "Min speed", min: 0.2, max: 4, step: 0.01, def: 0.8, color: COL.acc, fmt: function (v) { return v.toFixed(2) + " Hz"; }, tip: "Rotary only: the slow speed (chorale). The Speed knob never goes below it." });
   KW.m_max = mkKnob(m4, { id: "m_max", label: "Max speed", min: 2, max: 12, step: 0.01, def: 6.5, color: COL.acc, fmt: function (v) { return v.toFixed(2) + " Hz"; }, tip: "Rotary only: the fast speed (tremolo). The Speed knob never goes above it." });
   KW.m_dop = mkKnob(m4, { id: "m_dop", label: "Doppler", min: 0, max: 1, step: 0.01, def: 0.5, color: COL.acc, fmt: fmtPct, tip: "Rotary only: pitch wobble as the horn comes towards you and moves away." });
-  KW.m_spread = mkKnob(m4, { id: "m_spread", label: "Spread", min: 0, max: 1, step: 0.01, def: 0.7, color: COL.acc, fmt: fmtPct, tip: "Rotary only: how far the two microphones are apart. Wide is more stereo." });
   addUI("m_type", dimGroups); addUI("m_type", syncOn); for (var oi = 0; oi < 8; oi++) addUI("mo" + oi, syncOn); syncOn();
   loadPage();
 
@@ -1171,7 +1177,7 @@ function dimGroups() {
   ["shift", "shimmer", "shift2", "shimmer2"].forEach(function (k) { KW[k].style.opacity = sh ? 1 : 0.35; });
   KW.color.style.opacity = vel ? 1 : 0.35; KW.rspec.style.opacity = S.type >= 6 ? 1 : 0.35;
   var dt = S.dtype | 0; KW.dmod.style.opacity = (dt === 1 || dt === 3) ? 1 : 0.35; KW.drate.style.opacity = (dt === 1 || dt === 3) ? 1 : 0.35;
-  var mt = S.m_type | 0, on = { m_speed: mt !== 7, m_depth: mt <= 4 || mt === 6, m_voices: mt === 0, m_stages: mt === 2, m_regen: mt <= 2, m_pre: mt === 0 || mt === 1 || mt === 7, m_diff: mt === 0, m_wave: mt <= 4 || mt === 6, m_phase: mt <= 3 || mt === 6, m_shift: mt === 7, m_drive: mt === 5, m_min: mt === 5, m_max: mt === 5, m_dop: mt === 5, m_spread: mt === 5 };
+  var mt = S.m_type | 0, on = { m_speed: mt !== 7, m_depth: mt <= 4 || mt === 6, m_voices: mt === 0 || mt === 7, m_stages: mt === 2, m_regen: mt <= 2, m_pre: mt === 0 || mt === 1 || mt === 7, m_diff: mt === 0, m_wave: mt <= 4 || mt === 6, m_phase: mt <= 3 || mt === 6, m_shift: mt === 7, m_drive: mt === 5, m_min: mt === 5, m_max: mt === 5, m_dop: mt === 5, m_spread: mt === 5 || mt === 7 };
   for (var mk in on) if (KW[mk]) KW[mk].style.opacity = on[mk] ? 1 : 0.35;
   var lx = S.lexmix > 0.001; ["lexmode", "bass", "xover", "shape", "spread", "diff", "spin", "wander", "early"].forEach(function (k) { KW[k].style.opacity = lx ? 1 : 0.35; });
 }
@@ -1441,10 +1447,18 @@ function drawMove(c) {
   g.fillStyle = "#06080a"; g.fillRect(0, 0, w, h); axisFont(g);
   var sp = ty === 5 ? clamp(S.m_speed, S.m_min, S.m_max) : S.m_speed, depth = S.m_depth, off = 0.5 * S.m_phase, wf = S.m_wave | 0, T = 3 / sp;
   [0, 0.5, 1].forEach(function (u) { var y = Math.round(P.t + (1 - u) * ph) + 0.5; g.strokeStyle = "#1a2422"; g.beginPath(); g.moveTo(P.l, y); g.lineTo(w - P.r, y); g.stroke(); g.fillStyle = "#8f8bd6"; g.textAlign = "right"; g.textBaseline = "middle"; g.fillText(Math.round(u * 100) + " %", P.l - 6, y); });
-  for (i = 0; i <= 6; i++) { var xt = Math.round(P.l + pw * i / 6) + 0.5; g.strokeStyle = "#1a2422"; g.beginPath(); g.moveTo(xt, P.t); g.lineTo(xt, h - P.b); g.stroke(); g.fillStyle = "#8f8bd6"; g.textAlign = "center"; g.textBaseline = "top"; g.fillText((T * i / 6).toFixed(T < 1 ? 2 : 1) + " s", xt, h - P.b + 6); }
-  if (ty === 7) {
-    g.fillStyle = "#8f93a3"; g.textAlign = "center"; g.textBaseline = "middle"; g.font = "15px 'Barlow Condensed',sans-serif";
-    g.fillText("Detune does not move: the left copy is " + S.m_shift.toFixed(1) + " cents sharp, the right copy " + S.m_shift.toFixed(1) + " cents flat.", w / 2, h / 2); return;
+  var hh = document.getElementById("hint"); if (hh) hh.hidden = ty === 7 || E.playing;
+  for (i = 0; i <= 6 && ty !== 7; i++) { var xt = Math.round(P.l + pw * i / 6) + 0.5; g.strokeStyle = "#1a2422"; g.beginPath(); g.moveTo(xt, P.t); g.lineTo(xt, h - P.b); g.stroke(); g.fillStyle = "#8f8bd6"; g.textAlign = "center"; g.textBaseline = "top"; g.fillText((T * i / 6).toFixed(T < 1 ? 2 : 1) + " s", xt, h - P.b + 6); }
+  if (ty === 7) {   /* detune: the voices fan out in pitch (sideways, in cents) and are panned by Spread (colour: pink left, cyan right) */
+    var nvd = clamp(Math.round(S.m_voices), 1, 7), shd = S.m_shift, spd = S.m_spread, vi, tt, vx, vh, pn, cc;
+    g.strokeStyle = "#2a3a36"; g.beginPath(); g.moveTo(P.l, h - P.b); g.lineTo(w - P.r, h - P.b); g.stroke();
+    for (vi = 0; vi < nvd; vi++) {
+      tt = nvd > 1 ? 2 * vi / (nvd - 1) - 1 : 0; vx = P.l + pw * (0.5 + 0.42 * tt); pn = spd * tt; vh = ph * 0.8;
+      cc = pn < -0.05 ? "#FF1383" : pn > 0.05 ? "#6CC9F5" : "#CD92FE"; g.fillStyle = cc; g.fillRect(vx - 5, h - P.b - vh, 10, vh);
+      g.fillStyle = "#8f8bd6"; g.textAlign = "center"; g.textBaseline = "top"; g.font = "12px 'JetBrains Mono',monospace"; g.fillText((tt * shd >= 0 ? "+" : "") + (tt * shd).toFixed(1) + " ct", vx, h - P.b + 6);
+    }
+    g.fillStyle = "#8f93a3"; g.textAlign = "center"; g.textBaseline = "top"; g.font = "15px 'Barlow Condensed',sans-serif";
+    g.fillText(nvd + " voice" + (nvd > 1 ? "s" : "") + " fanned over +-" + shd.toFixed(1) + " cents. Pink: panned left, cyan: right, purple: centre.", w / 2, P.t + 4); return;
   }
   var cols = [COL.pink, COL.blue];
   for (ch = 1; ch >= 0; ch--) {
@@ -1776,8 +1790,10 @@ var FACT_M = [
   mpr("Rotary Slow", { m_type: 5, m_speed: 0.8, m_drive: 0.25 }),
   mpr("Rotary Fast", { m_type: 5, m_speed: 6.5, m_drive: 0.3, m_dop: 0.6 }),
   mpr("Gentle Vibrato", { m_type: 6, m_speed: 5, m_depth: 0.4 }),
-  mpr("Detune Thickener", { m_type: 7, m_shift: 12, m_pre: 12 }),
-  mpr("Detune Wide", { m_type: 7, m_shift: 25, m_pre: 18 })
+  mpr("Detune Thickener", { m_type: 7, m_voices: 2, m_shift: 12, m_pre: 12 }),
+  mpr("Detune Wide", { m_type: 7, m_voices: 2, m_shift: 25, m_pre: 18 }),
+  mpr("Supersaw Detune", { m_type: 7, m_voices: 7, m_shift: 30, m_spread: 0.9, m_pre: 0 }),
+  mpr("Supersaw Subtle", { m_type: 7, m_voices: 5, m_shift: 14, m_spread: 0.6, m_pre: 0 })
 ];
 var G0 = "ifx>rev|del|mod>wfx";
 function fp(name, o) { var v = { graph: G0, rev_on: true, del_on: false, mod_on: false, ifx_on: true, wfx_on: true, i_hp: 20, i_lp: 20000, i_band: 0, i_drive: 6, i_mix: 0, w_drive: 8, w_smix: 0, w_depth: 0.6, w_qmix: 0, w_duck: 0, w_drel: 250, w_dmode: "follow", w_dsrc: "input", w_dshape: 0, w_drate: 2, w_dratio: 1, w_bpm: 140, w_width: 1, w_boost: 0, w_lim: false, lim_in: 0, lim_out: -1 }; for (var k in o) v[k] = o[k]; return { name: name, v: v }; }

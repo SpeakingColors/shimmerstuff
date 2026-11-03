@@ -544,7 +544,16 @@ void ModView::paint(juce::Graphics& g)
     g.setFont(mono(10.5f)); g.setColour(col::lilac.withAlpha(0.7f)); g.drawText("max", 8, (int) pl.getY() - 6, 40, 12, juce::Justification::right); g.drawText("min", 8, (int) pl.getBottom() - 6, 40, 12, juce::Justification::right);
     if (e == 7)
     {
-        g.setColour(col::dim); g.setFont(font(15.f)); g.drawText("Detune has no movement: it adds a slightly sharp and flat copy to thicken the sound.", pl.toNearestInt(), juce::Justification::centred); return;
+        const int nv = juce::jlimit(1, 7, juce::roundToInt(proc.get(ssp::modId(7, 2)))); const float sh = proc.get(ssp::modId(7, 14)), sp = proc.get(ssp::modId(7, 9));
+        g.setColour(col::line); g.drawHorizontalLine((int) pl.getBottom(), pl.getX(), pl.getRight());
+        for (int v = 0; v < nv; ++v)
+        {
+            const float t = nv > 1 ? 2.f * (float) v / (float) (nv - 1) - 1.f : 0.f, x = pl.getX() + pl.getWidth() * (0.5f + 0.42f * t), pn = sp * t;
+            g.setColour(pn < -0.05f ? col::pink : pn > 0.05f ? col::blue : col::lilac); g.fillRect(x - 5.f, pl.getY() + pl.getHeight() * 0.2f, 10.f, pl.getHeight() * 0.8f);
+            g.setColour(col::lilac); g.setFont(mono(11.f)); g.drawText(juce::String(t * sh >= 0 ? "+" : "") + juce::String(t * sh, 1) + " ct", (int) x - 40, (int) pl.getBottom() + 4, 80, 14, juce::Justification::centred);
+        }
+        g.setColour(col::dim); g.setFont(font(15.f));
+        g.drawText(juce::String(nv) + (nv > 1 ? " voices" : " voice") + " fanned over +-" + juce::String(sh, 1) + " cents. Pink: panned left, blue: right, purple: centre.", 0, 8, getWidth(), 18, juce::Justification::centred); return;
     }
     const float cycles = 3.f;
     auto lfo = [&](float ph)
@@ -810,7 +819,7 @@ const char* kDirName[4] = { "reverb", "delay", "modulation", "fx" };
 const std::vector<const char*>& keysOf(int t) { return t == 0 ? ssp::reverbKeys() : t == 1 ? ssp::delayKeys() : t == 2 ? ssp::modKeys() : ssp::fxKeys(); }
 const char* tabOnId(int t) { return t == 0 ? "rev_on" : t == 1 ? "del_on" : t == 2 ? "mod_on" : nullptr; }
 // which of the 15 per-effect modulation knobs each effect uses (bit = effect index)
-const int kModUse[15] = { 0x7F, 0x5F, 0x01, 0x04, 0x07, 0x83, 0x01, 0x5F, 0x4F, 0x20, 0x20, 0x20, 0x20, 0x20, 0x80 };
+const int kModUse[15] = { 0x7F, 0x5F, 0x81, 0x04, 0x07, 0x83, 0x01, 0x5F, 0x4F, 0xA0, 0x20, 0x20, 0x20, 0x20, 0x80 };
 }
 
 Body::Body(ShimmerstuffProcessor& p)
@@ -913,11 +922,11 @@ Body::Body(ShimmerstuffProcessor& p)
     // modulation tab: the knobs follow the effect chosen in "Edit effect"
     mType.init(*this, a, "m_type", "Edit effect", juce::StringArray { "Chorus", "Flanger", "Phaser", "Tremolo", "Pan", "Rotary", "Vibrato", "Detune" }, "Which effect the knobs on this tab edit. Every effect keeps its own settings; switch them on in Active effects to use them together.");
     {
-        const char* mn[15] = { "Speed", "Depth", "Voices", "Stages", "Regen", "Pre-delay", "Diffusion", "Waveform", "Phase", "Spread", "Drive", "Min speed", "Max speed", "Doppler", "Detune" };
+        const char* mn[15] = { "Speed", "Depth", "Voices", "Stages", "Regen", "Pre-delay", "Diffusion", "Waveform", "Phase", "Spread", "Drive", "Min speed", "Max speed", "Doppler", "Shift" };
         const Knob::Kind mkk[15] = { Knob::Plain, Knob::Pct, Knob::Int, Knob::Plain, Knob::Plain, Knob::Ms, Knob::Pct, Knob::Wave, Knob::Pct, Knob::Pct, Knob::Pct, Knob::Plain, Knob::Plain, Knob::Pct, Knob::Plain };
-        const char* mt[15] = { "How fast the effect moves, in Hz.", "How far it moves.", "Chorus: number of voices.", "Phaser: 4, 8 or 12 stages. More stages, deeper notches.", "Feedback. Negative flips the sound hollow.",
+        const char* mt[15] = { "How fast the effect moves, in Hz.", "How far it moves.", "Chorus and detune: number of voices (detune fans them out evenly, up to 7).", "Phaser: 4, 8 or 12 stages. More stages, deeper notches.", "Feedback. Negative flips the sound hollow.",
             "Base delay time. Chorus, flanger and detune.", "Chorus: smears each voice for a softer shimmer.", "Shape of the movement: sine, triangle or square.", "Left and right offset of the movement. 0 is the same, 100 % is opposite.",
-            "Rotary: how wide the speakers spread.", "Rotary: how hard the amp is pushed.", "Rotary: the slow speed, in Hz.", "Rotary: the fast speed, in Hz.", "Rotary: pitch wobble from the moving horn.", "Detune: how many cents sharp and flat the copies are." };
+            "Stereo spread: how wide the voices are panned (detune) or how far apart the rotary speakers sit.", "Rotary: how hard the amp is pushed.", "Rotary: the slow speed, in Hz.", "Rotary: the fast speed, in Hz.", "Rotary: pitch wobble from the moving horn.", "Detune: the outer voices are this many cents sharp and flat; the rest fan out evenly in between (100 ct is a semitone)." };
         const juce::Colour mc[15] = { col::pink, col::pink, col::lilac, col::lilac, col::lilac, col::lilac, col::lilac, col::yellow, col::yellow, col::blue, col::blue, col::blue, col::blue, col::blue, col::mint };
         for (int i = 0; i < 15; ++i) mk[i].init(*this, a, ssp::modId(0, i), mn[i], mkk[i], mc[i], mt[i]);
         auto fmt = [](Knob& k, std::function<juce::String(double)> f, bool num) { k.s.textFromValueFunction = f; if (num) k.s.valueFromTextFunction = [](const juce::String& t) { return t.retainCharacters("0123456789.-").getDoubleValue(); }; k.s.onValueChange(); };
@@ -1229,7 +1238,7 @@ void Body::layoutTab()
         if (sub[2] == 0) modv.setVisible(true); else toneMod.setVisible(true);
         modv.setBounds(L, dispTop, LW, p1 - 8 - dispTop); toneMod.setBounds(modv.getBounds());
         panels.push_back({ { L, p1, LW, h12 }, 1, "EFFECT", "the effect you edit here; every effect keeps its own settings" });
-        panels.push_back({ { L, p2, wl, h12 }, 2, "CHORUS, FLANGER, PHASER, DETUNE", "" });
+        panels.push_back({ { L, p2, wl, h12 }, 2, "CHORUS, FLANGER, PHASER, DETUNE", "voices, spread and shift" });
         panels.push_back({ { L + wl + 8, p2, wr, h12 }, 3, "ROTARY SPEAKER", "" });
         panels.push_back({ { L, p3, LW, h3 }, 4, "ACTIVE EFFECTS", "switch on as many as you like; they run in this order" });
         place(modOn, L + LW - 78, p1 + 6, 66, 24);
@@ -1237,10 +1246,10 @@ void Body::layoutTab()
         const int order[4] = { 0, 1, 7, 8 };
         for (int i = 0; i < 4; ++i) place(mk[order[i]], L + 160 + i * 100, p1 + 32, 100, 76);
         place(mMix, L + 160 + 400, p1 + 32, 100, 76); place(mLevel, L + 160 + 500, p1 + 32, 100, 76);
-        const int ch[6] = { 2, 3, 4, 5, 6, 14 };
-        for (int i = 0; i < 6; ++i) place(mk[ch[i]], L + 16 + i * 90, p2 + 32, 90, 76);
-        const int ro[5] = { 10, 11, 12, 13, 9 };
-        for (int i = 0; i < 5; ++i) place(mk[ro[i]], L + wl + 8 + 16 + i * 90, p2 + 32, 90, 76);
+        const int ch[7] = { 2, 3, 4, 5, 6, 14, 9 };
+        for (int i = 0; i < 7; ++i) place(mk[ch[i]], L + 8 + i * 79, p2 + 32, 79, 76);
+        const int ro[4] = { 10, 11, 12, 13 };
+        for (int i = 0; i < 4; ++i) place(mk[ro[i]], L + wl + 8 + 16 + i * 90, p2 + 32, 90, 76);
         for (int i = 0; i < 8; ++i) place(chip[i], L + 16 + i * 128, p3 + 38, 120, 36);
         syncEdit();
     }
